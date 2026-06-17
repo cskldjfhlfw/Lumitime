@@ -7,7 +7,7 @@ on:
   workflow_dispatch:
 
 env:
-  DOCKERHUB_NAMESPACE: yeennnn
+  DOCKERHUB_NAMESPACE: yeen666
   API_IMAGE: lumitime-api
   NGINX_IMAGE: lumitime-nginx
 
