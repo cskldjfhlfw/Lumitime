@@ -1,0 +1,29 @@
+# Python
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.venv/
+venv/
+
+# Backend runtime data
+backend/lumitime.db
+backend/uploads/
+
+# Frontend
+frontend/node_modules/
+frontend/dist/
+frontend/.vite/
+
+# Deployment secrets and local state
+deploy/.env
+deploy/*.local.env
+deploy/certs/
+deploy/backups/
+deploy/compose.local.override.yml
+.deploy-local/
+
+# Logs and temporary files
+*.log
+*.tmp
