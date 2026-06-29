@@ -4,6 +4,7 @@ import re
 import shutil
 import subprocess
 import uuid
+from datetime import UTC
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -260,6 +261,24 @@ def test_password_changes_revoke_existing_sessions() -> None:
         assert changed.status_code == 200, changed.text
         assert current_client.get("/api/v1/auth/me").status_code == 200
         assert old_client.get("/api/v1/auth/me").status_code == 401
+
+
+def test_authenticated_session_accepts_timezone_aware_expiry() -> None:
+    with TestClient(app) as client:
+        _login(client, "admin", "admin")
+        token_hash = secure_hash(client.cookies.get("lumitime_session") or "")
+
+        with SessionLocal() as db:
+            from backend.app.models import SessionRecord
+
+            session = db.scalar(select(SessionRecord).where(SessionRecord.token_hash == token_hash))
+            assert session is not None
+            session.expires_at = session.expires_at.replace(tzinfo=UTC)
+            db.commit()
+
+        response = client.get("/api/v1/auth/me")
+        assert response.status_code == 200, response.text
+        assert response.json()["data"]["username"] == "admin"
 
 
 def test_admin_reset_password_revokes_user_sessions() -> None:

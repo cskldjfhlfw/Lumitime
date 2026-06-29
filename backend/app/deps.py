@@ -8,7 +8,7 @@ from sqlalchemy import delete, select
 from sqlalchemy.orm import Session
 
 from .config import settings
-from .core import ApiError, now_utc, prefixed_id, secure_hash
+from .core import ApiError, as_naive_utc, now_utc, prefixed_id, secure_hash
 from .database import get_db
 from .models import SessionRecord, User
 
@@ -72,7 +72,7 @@ def get_current_user_optional(request: Request, db: Session = Depends(get_db)) -
     session = db.scalar(select(SessionRecord).where(SessionRecord.token_hash == secure_hash(token)))
     if not session:
         return None
-    if session.expires_at < now_utc():
+    if as_naive_utc(session.expires_at) < now_utc():
         db.execute(delete(SessionRecord).where(SessionRecord.id == session.id))
         db.commit()
         return None

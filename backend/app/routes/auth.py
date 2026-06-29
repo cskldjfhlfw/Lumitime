@@ -10,7 +10,7 @@ from sqlalchemy.orm import Session
 
 from ..audit import write_audit
 from ..config import settings
-from ..core import ApiError, created, hash_password, make_response, now_utc, password_needs_rehash, prefixed_id, request_meta, verify_password
+from ..core import ApiError, as_naive_utc, created, hash_password, make_response, now_utc, password_needs_rehash, prefixed_id, request_meta, verify_password
 from ..database import get_db
 from ..deps import clear_session_cookie, create_session, delete_user_sessions, require_auth
 from ..models import InviteCode, InviteCodeUsage, SessionRecord, User
@@ -74,6 +74,7 @@ def bootstrap_admin(body: BootstrapAdminBody, request: Request, db: Session = De
     user.status = "active"
     user.deleted_at = None
     db.add(user)
+    db.flush()
     write_audit(db, request=request, actor=user, action="bootstrap_admin", resource_type="user", resource_id=user.id, metadata={"username": user.username})
     db.commit()
     return created({"user": user_public(user)}, message="管理员初始化完成。", request=request)
@@ -139,7 +140,7 @@ def register_with_invite(body: RegisterWithInviteBody, request: Request, db: Ses
     invite = db.scalar(select(InviteCode).where(InviteCode.code == body.invite_code))
     if invite is None or invite.status != "active":
         raise ApiError("BAD_REQUEST", "邀请码不可用。")
-    if invite.expires_at is not None and invite.expires_at < now_utc():
+    if invite.expires_at is not None and as_naive_utc(invite.expires_at) < now_utc():
         invite.status = "expired"
         db.commit()
         raise ApiError("BAD_REQUEST", "邀请码已过期。")
