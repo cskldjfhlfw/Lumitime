@@ -197,7 +197,7 @@ def _run_service_request_with_credentials(
                 task_config = {}
 
         is_log_auto_submit = service is not None and service.script_key == LOG_AUTO_SUBMIT_SCRIPT_KEY
-        real_log_submit = is_log_auto_submit and settings.real_log_submit_enabled
+        real_log_submit = is_log_auto_submit and settings.real_log_submit_enabled and not settings.dry_run_log_submit_enabled
         prepared_content: PreparedLogContent | None = None
         steps: list[tuple[str, str]] = []
 

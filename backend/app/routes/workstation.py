@@ -91,9 +91,9 @@ def _parse_day_end(value: str):
 def _service_available_to_users(service: WorkstationService) -> bool:
     if service.status != "enabled" or service.deleted_at is not None:
         return False
-    if settings.inline_worker_enabled:
-        return True
-    return service.script_key not in {"log_auto_submit", "not_integrated"} and service.script_version != "v0.1.0-mock"
+    if service.id != "service_log_auto_submit" or service.script_key != LOG_AUTO_SUBMIT_SCRIPT_KEY:
+        return False
+    return settings.inline_worker_enabled
 
 
 def _collect_reserved_task_config_fields(value: object) -> list[str]:

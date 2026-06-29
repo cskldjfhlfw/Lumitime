@@ -28,12 +28,20 @@ def seed_runtime_data() -> None:
         seed_data(db)
 
 
+def seed_runtime_workstation_services() -> None:
+    with SessionLocal() as db:
+        _ensure_production_workstation_service(db)
+        _disable_unintegrated_services(db)
+        db.commit()
+
+
 def init_db() -> None:
     seed_runtime_data()
 
 
 def seed_data(db: Session) -> None:
     if not settings.demo_seed_enabled:
+        _ensure_production_workstation_service(db)
         _disable_known_demo_artifacts(db)
         _disable_unintegrated_services(db)
         db.commit()
@@ -124,6 +132,13 @@ def _disable_unintegrated_services(db: Session) -> None:
     for service in services:
         if service.script_key in {"log_auto_submit", "not_integrated"} or service.script_version == "v0.1.0-mock":
             service.status = "disabled"
+
+
+def _ensure_production_workstation_service(db: Session) -> None:
+    admin = db.scalar(select(User).where(User.role == "admin", User.status == "active", User.deleted_at.is_(None)))
+    if admin is None:
+        return
+    _seed_or_update_services(db, admin.id)
 
 
 def _seed_content(db: Session, admin_id: str) -> None:
@@ -309,8 +324,8 @@ def _seed_or_update_services(db: Session, admin_id: str) -> None:
         {
             "id": "service_log_auto_submit",
             "name": "日志自动提交",
-            "summary": "按日志填报模板调用真实提交脚本。",
-            "description": "输入模板所需字段后，后端调用 submit_example 链路执行真实提交；请确认账号和日期后再提交。",
+            "summary": "按日志填报模板执行本地验收流程。",
+            "description": "输入模板所需字段后，后端执行本地日志提交验收流程，生成脱敏执行记录；dry_run 模式不会请求真实学校系统。",
             "status": "enabled" if settings.inline_worker_enabled else "disabled",
             "script_key": "log_auto_submit",
             "script_version": "v0.1.0-mock",
@@ -321,7 +336,7 @@ def _seed_or_update_services(db: Session, admin_id: str) -> None:
             "name": "脚本执行引擎",
             "summary": "在线运行授权脚本并返回脱敏结果。",
             "description": "在线运行自定义脚本，支持定时任务与参数配置。",
-            "status": "enabled" if settings.inline_worker_enabled else "disabled",
+            "status": "disabled",
             "script_key": "not_integrated",
             "script_version": "v0.2.0",
             "input_schema_json": json.dumps(
@@ -347,7 +362,7 @@ def _seed_or_update_services(db: Session, admin_id: str) -> None:
             "name": "站点监控",
             "summary": "实时监测服务可用性和历史趋势。",
             "description": "实时监测服务可用性，异常告警通知，历史记录查看。",
-            "status": "enabled" if settings.inline_worker_enabled else "disabled",
+            "status": "disabled",
             "script_key": "not_integrated",
             "script_version": "v0.3.1",
             "input_schema_json": "[]",
@@ -367,7 +382,7 @@ def _seed_or_update_services(db: Session, admin_id: str) -> None:
             "name": "API 代理网关",
             "summary": "统一管理外部 API 调用，提供限流与追踪。",
             "description": "统一管理外部 API 调用，限流、鉴权、日志一体化。",
-            "status": "enabled" if settings.inline_worker_enabled else "disabled",
+            "status": "disabled",
             "script_key": "not_integrated",
             "script_version": "v0.2.3",
             "input_schema_json": "[]",

@@ -551,10 +551,7 @@ def test_workstation_states_and_retry() -> None:
                 "task_config": {},
             },
         )
-        assert not_integrated.status_code == 201
-        not_integrated_detail = client.get(f"/api/v1/workstation/service-requests/{not_integrated.json()['data']['service_request_id']}")
-        assert not_integrated_detail.json()["data"]["status"] == "not_integrated"
-        assert not_integrated_detail.json()["data"]["failure_code"] == "SERVICE_NOT_INTEGRATED"
+        assert not_integrated.status_code == 404
 
         my_records = client.get("/api/v1/workstation/service-requests/my?page=1&page_size=2")
         assert my_records.status_code == 200
@@ -887,6 +884,7 @@ def test_real_submit_adapter_path_is_mockable_without_network(monkeypatch) -> No
         )
 
     monkeypatch.setattr(type(runner.settings), "real_log_submit_enabled", property(lambda _self: True))
+    monkeypatch.setattr(type(runner.settings), "dry_run_log_submit_enabled", property(lambda _self: False))
     monkeypatch.setattr(runner, "run_real_log_submit", fake_real_submit)
 
     with TestClient(app) as client:
@@ -928,6 +926,7 @@ def test_real_submit_preflight_fails_before_network_when_resources_missing(monke
     from submit_example import sso_cppu
 
     monkeypatch.setattr(type(runner.settings), "real_log_submit_enabled", property(lambda _self: True))
+    monkeypatch.setattr(type(runner.settings), "dry_run_log_submit_enabled", property(lambda _self: False))
     monkeypatch.setattr(sso_cppu, "_TOOLS", Path("backend/resources/__missing_encrypt_password.cjs"))
     monkeypatch.setattr(sso_cppu, "_RSA_DEPENDENCIES", (Path("backend/resources/__missing_加密.js"),))
 
@@ -1141,7 +1140,18 @@ def test_production_settings_reject_unsafe_defaults() -> None:
         cors_origins=("https://lumitime.example.com",),
     )
     assert secure.is_production
-    assert secure.inline_worker_enabled is False
+    assert secure.inline_worker_enabled is True
+    assert secure.dry_run_log_submit_enabled is False
+
+    dry_run = Settings(
+        environment="production",
+        secret_key="x" * 32,
+        cookie_secure=True,
+        cors_origins=("https://lumitime.example.com",),
+        log_submit_mode="dry_run",
+    )
+    assert dry_run.inline_worker_enabled is True
+    assert dry_run.dry_run_log_submit_enabled is True
 
 
 def test_admin_filters_and_pagination() -> None:

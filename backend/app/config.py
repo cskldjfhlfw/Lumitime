@@ -73,11 +73,15 @@ class Settings:
 
     @property
     def inline_worker_enabled(self) -> bool:
-        return self.enable_inline_worker and not self.is_production
+        return self.enable_inline_worker
 
     @property
     def real_log_submit_enabled(self) -> bool:
         return self.log_submit_mode == "real" and self.environment != "test"
+
+    @property
+    def dry_run_log_submit_enabled(self) -> bool:
+        return self.log_submit_mode in {"dry_run", "mock", "simulated"} or self.environment == "test"
 
     @property
     def auto_migrate_enabled(self) -> bool:

@@ -13,7 +13,7 @@ from .core import ApiError, error_response, make_response, public_request_id
 from .db_lifecycle import initialize_database_for_runtime
 from .routes import admin, auth, content, public, workstation
 from .runner import reconcile_pending_requests_after_startup
-from .seed import seed_runtime_data
+from .seed import seed_runtime_data, seed_runtime_workstation_services
 
 
 CSRF_SAFE_METHODS = {"GET", "HEAD", "OPTIONS"}
@@ -35,6 +35,8 @@ async def lifespan(app_: FastAPI):
     initialize_database_for_runtime()
     if settings.demo_seed_enabled:
         seed_runtime_data()
+    else:
+        seed_runtime_workstation_services()
     reconcile_pending_requests_after_startup()
     yield
 

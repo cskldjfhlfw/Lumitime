@@ -10,7 +10,7 @@
 - `nginx`: 托管 React 构建产物，处理 HTTPS，并将 `/api/` 反向代理到 `api:8000`。
 - `backup`: 一次性备份任务，导出 PostgreSQL dump、uploads 压缩包和部署配置模板。
 
-当前代码没有可独立生产运行的外部 Worker。生产部署保持 `LUMITIME_ENABLE_INLINE_WORKER=0`，未真实接入的工作站服务会按当前后端逻辑返回 `not_integrated`。
+当前生产部署默认启用内联日志提交执行器：`LUMITIME_ENABLE_INLINE_WORKER=1` 且 `LUMITIME_LOG_SUBMIT_MODE=dry_run`。该模式复用本地验收流程，会生成服务记录和脱敏执行日志，但不会请求真实学校系统。只有在确认外部脚本资源、目标系统网络和运维告警都就绪后，才建议把 `LUMITIME_LOG_SUBMIT_MODE` 切为 `real`。
 
 ## 2. 首次部署
 
