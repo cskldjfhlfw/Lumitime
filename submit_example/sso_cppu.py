@@ -1,7 +1,7 @@
 """
 中国人民警察大学统一认证（sso.cppu.edu.cn）登录辅助。
 
-- RSA：Node 执行 `mvp/tools/encrypt_password.cjs`（与 `url梳理/登录.js` + `url梳理/加密.js` 一致）。
+- RSA：Node 执行 `backend/resources/encrypt_password.cjs`，并读取同目录的 `登录.js` + `加密.js`。
 - 验证码：GET /tpass/captcha.jpg + ddddocr。
 """
 
@@ -10,14 +10,25 @@ from __future__ import annotations
 import re
 import shutil
 import subprocess
+from dataclasses import dataclass, field
+from html.parser import HTMLParser
 from pathlib import Path
 from typing import Any
-from urllib.parse import urlencode
+from urllib.parse import urljoin, urlencode
 
 import requests
 
-_REPO_ROOT = Path(__file__).resolve().parents[2]
-_TOOLS = _REPO_ROOT / "mvp" / "tools" / "encrypt_password.cjs"
+_REPO_ROOT = Path(__file__).resolve().parents[1]
+_RESOURCE_DIR = _REPO_ROOT / "backend" / "resources"
+_TOOL_CANDIDATES = (
+    _RESOURCE_DIR / "encrypt_password.cjs",
+    _REPO_ROOT / "mvp" / "tools" / "encrypt_password.cjs",
+)
+_TOOLS = next((path for path in _TOOL_CANDIDATES if path.is_file()), _TOOL_CANDIDATES[0])
+_RSA_DEPENDENCIES = (
+    _RESOURCE_DIR / "加密.js",
+    _RESOURCE_DIR / "登录.js",
+)
 
 SSO_LOGIN_URL = (
     "https://sso.cppu.edu.cn/tpass/login?"
@@ -35,6 +46,22 @@ JW_PROBE_URLS = (
     "https://jw.cppu.edu.cn/je/",
 )
 
+SENSITIVE_LOGIN_FORM_FIELDS = {
+    "username",
+    "password",
+    "authcode",
+    "captcha",
+    "submit",
+}
+
+
+@dataclass(frozen=True)
+class LoginPageState:
+    execution: str | None
+    post_url: str
+    captcha_url: str
+    hidden_fields: dict[str, str] = field(default_factory=dict)
+
 
 def _log(
     step: str,
@@ -51,6 +78,79 @@ def _parse_execution(html: str) -> str | None:
         return m.group(1)
     m = re.search(r"name='execution'\s+value='([^']+)'", html)
     return m.group(1) if m else None
+
+
+class _LoginPageParser(HTMLParser):
+    def __init__(self) -> None:
+        super().__init__()
+        self.forms: list[dict[str, Any]] = []
+        self.images: list[dict[str, str]] = []
+        self._current_form: dict[str, Any] | None = None
+
+    def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
+        attr = {key.lower(): value or "" for key, value in attrs}
+        if tag.lower() == "form":
+            self._current_form = {"attrs": attr, "inputs": []}
+            self.forms.append(self._current_form)
+            return
+        if tag.lower() == "input" and self._current_form is not None:
+            self._current_form["inputs"].append(attr)
+            return
+        if tag.lower() == "img":
+            self.images.append(attr)
+
+    def handle_endtag(self, tag: str) -> None:
+        if tag.lower() == "form":
+            self._current_form = None
+
+
+def _parse_login_page(html: str, page_url: str) -> LoginPageState:
+    parser = _LoginPageParser()
+    parser.feed(html)
+    login_form = _choose_login_form(parser.forms)
+    inputs = login_form.get("inputs", []) if login_form else []
+    hidden_fields: dict[str, str] = {}
+    for item in inputs:
+        name = str(item.get("name") or "").strip()
+        if not name or name.lower() in SENSITIVE_LOGIN_FORM_FIELDS:
+            continue
+        if str(item.get("type") or "").lower() == "hidden":
+            hidden_fields[name] = str(item.get("value") or "")
+
+    execution = hidden_fields.get("execution") or _parse_execution(html)
+    post_url = urljoin(page_url, str(login_form.get("attrs", {}).get("action") or page_url)) if login_form else page_url
+    captcha_url = _parse_captcha_url(parser.images, html, page_url)
+    return LoginPageState(
+        execution=execution,
+        post_url=post_url,
+        captcha_url=captcha_url,
+        hidden_fields=hidden_fields,
+    )
+
+
+def _choose_login_form(forms: list[dict[str, Any]]) -> dict[str, Any] | None:
+    for form in forms:
+        inputs = form.get("inputs", [])
+        names = {str(item.get("name") or "").lower() for item in inputs}
+        ids = {str(item.get("id") or "").lower() for item in inputs}
+        if {"username", "password"} <= names or {"username", "password"} <= ids:
+            return form
+    for form in forms:
+        inputs = form.get("inputs", [])
+        if any(str(item.get("name") or "").lower() == "execution" for item in inputs):
+            return form
+    return forms[0] if forms else None
+
+
+def _parse_captcha_url(images: list[dict[str, str]], html: str, page_url: str) -> str:
+    for image in images:
+        candidate = image.get("src") or ""
+        if "captcha" in candidate.lower():
+            return urljoin(page_url, candidate)
+    m = re.search(r'contextPath\s*\+\s*["\']([^"\']*captcha[^"\']*)["\']', html, re.IGNORECASE)
+    if m:
+        return urljoin(page_url, m.group(1))
+    return CAPTCHA_URL
 
 
 def _encrypt_password_plain(plain: str) -> str:
@@ -162,22 +262,27 @@ def try_sso_login(
         if r0.status_code != 200:
             return logs, False, f"登录页 HTTP {r0.status_code}", None
 
-        execution = _parse_execution(r0.text)
-        if not execution:
+        login_page = _parse_login_page(r0.text, r0.url or SSO_LOGIN_URL)
+        if not login_page.execution:
             return logs, False, "无法从 HTML 解析 execution 隐藏域", None
         logs.append(
             _log(
                 "sso_execution",
-                "已解析 execution",
-                detail={"length": len(execution)},
+                "已解析登录页动态字段",
+                detail={
+                    "execution_length": len(login_page.execution),
+                    "hidden_field_count": len(login_page.hidden_fields),
+                    "post_url": login_page.post_url[:160],
+                    "captcha_url": login_page.captcha_url[:160],
+                },
             )
         )
 
         logs.append(_log("sso_captcha", "GET 验证码 captcha.jpg"))
         r_cap = s.get(
-            CAPTCHA_URL,
+            login_page.captcha_url,
             timeout=20,
-            headers={"Referer": SSO_LOGIN_URL},
+            headers={"Referer": r0.url or SSO_LOGIN_URL},
         )
         logs.append(
             _log(
@@ -195,15 +300,16 @@ def try_sso_login(
         authcode = authcode[:4]
         logs.append(_log("sso_captcha", "验证码 OCR 完成（4 位，值不写入日志）", detail={"len": 4}))
 
-        logs.append(_log("rsa_encrypt", "RSA 加密密码（Node + url梳理 JS）"))
+        logs.append(_log("rsa_encrypt", "RSA 加密密码（Node + backend/resources JS）"))
         enc_pwd = _encrypt_password_plain(password)
 
         form = {
+            **login_page.hidden_fields,
             "username": username,
             "password": enc_pwd,
             "authcode": authcode,
             "rememberMe": "true",
-            "execution": execution,
+            "execution": login_page.execution,
             "encrypted": "true",
             "_eventId": "submit",
             "loginType": "1",
@@ -213,13 +319,13 @@ def try_sso_login(
 
         logs.append(_log("sso_post", "POST 登录表单"))
         r1 = s.post(
-            SSO_LOGIN_URL,
+            login_page.post_url,
             data=body,
             headers={
                 **headers,
                 "Content-Type": "application/x-www-form-urlencoded",
                 "Origin": "https://sso.cppu.edu.cn",
-                "Referer": SSO_LOGIN_URL,
+                "Referer": r0.url or SSO_LOGIN_URL,
             },
             timeout=45,
             allow_redirects=True,

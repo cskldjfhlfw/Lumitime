@@ -39,9 +39,13 @@ Environment variables:
 - `LUMITIME_COOKIE_SECURE`: set to `1` for HTTPS deployments.
 - `LUMITIME_CORS_ORIGINS`: comma-separated CORS origins. Defaults to local Vite origins.
 - `LUMITIME_UPLOAD_DIR`: upload storage root. Defaults to `backend/uploads`.
+- `LUMITIME_MAX_UPLOAD_BYTES`: maximum attachment upload size in bytes. Defaults to `52428800`.
 - `LUMITIME_BOOTSTRAP_TOKEN`: temporary production token for `POST /api/v1/auth/bootstrap-admin`.
 - `LUMITIME_AUTO_MIGRATE`: auto-run Alembic migrations in non-production environments. Defaults to `1`.
 - `LUMITIME_REQUIRE_MIGRATED_DB`: require the database to be at Alembic head before serving. Defaults to `1`.
+
+Authenticated write requests use a double-submit CSRF token. Browser clients should copy
+the `lumitime_csrf` cookie into the `X-CSRF-Token` header for non-GET requests.
 
 ## Production Deployment
 

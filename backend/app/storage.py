@@ -24,14 +24,14 @@ def safe_filename(filename: str | None) -> str:
     return SAFE_FILENAME_RE.sub("_", name)[:180]
 
 
-def store_attachment_bytes(attachment_id: str, filename: str, content: bytes) -> tuple[str, int, str]:
+def store_attachment_bytes(attachment_id: str, filename: str, content: bytes) -> tuple[str, str, int, str]:
     digest = hashlib.sha256(content).hexdigest()
     stored_name = safe_filename(filename)
     relative = Path("attachments") / attachment_id / stored_name
     target = upload_root() / relative
     target.parent.mkdir(parents=True, exist_ok=True)
     target.write_bytes(content)
-    return relative.as_posix(), len(content), digest
+    return relative.as_posix(), stored_name, len(content), digest
 
 
 def resolve_storage_key(storage_key: str) -> Path | None:

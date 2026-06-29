@@ -9,8 +9,11 @@ import { LightBeam } from '../features/auth/components/LightBeam';
 import { FallingFigure } from '../features/auth/components/FallingFigure';
 import { InteractiveCat } from '../features/auth/components/InteractiveCat';
 import { useAuth } from '../app/providers/AuthProvider';
+import LightRays from '../shared/components/LightRays';
 
 type LoginState = 'idle' | 'loading' | 'flipping' | 'done';
+
+const ENABLE_LOGIN_LIGHT_RAYS = false;
 
 export function LoginPage() {
   const navigate = useNavigate();
@@ -82,12 +85,31 @@ export function LoginPage() {
       <div className="hidden w-px flex-shrink-0 bg-gradient-to-b from-transparent via-white/10 to-transparent lg:block" />
 
       <motion.div
-        className="flex min-h-[calc(100vh-14rem)] flex-1 flex-col justify-center overflow-y-auto bg-white px-6 py-10 md:px-20 lg:min-h-screen"
+        className="relative flex min-h-[calc(100vh-14rem)] flex-1 flex-col justify-center overflow-hidden bg-[var(--lumitime-bg)] px-6 py-10 md:px-20 lg:min-h-screen"
         initial={{ opacity: 0, x: 20 }}
         animate={{ opacity: 1, x: 0 }}
         transition={{ duration: 0.6, delay: 0.2 }}
       >
-        <div className="mx-auto w-full max-w-sm">
+        {ENABLE_LOGIN_LIGHT_RAYS && (
+          <div className="pointer-events-none absolute inset-0">
+            <LightRays
+              raysOrigin="top-center"
+              raysColor="#fff7dc"
+              raysSpeed={0.74}
+              lightSpread={0.48}
+              rayLength={2.4}
+              followMouse
+              mouseInfluence={0.07}
+              noiseAmount={0.02}
+              distortion={0.03}
+              className="opacity-75"
+              pulsating={false}
+              fadeDistance={0.88}
+              saturation={1.02}
+            />
+          </div>
+        )}
+        <div className="relative z-10 mx-auto w-full max-w-sm">
           <div className="mb-10">
             <h1
               className="mb-2 text-4xl tracking-wide text-black"

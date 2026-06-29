@@ -13,10 +13,10 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, StreamingResponse
 from pydantic import BaseModel, Field, field_validator, model_validator
 
-from app.deepseek_sxrz import SXRZ_MAX_HAN, generate_internship_log_via_deepseek
-from app.han_text import count_han_chars, truncate_to_max_han
-from app.log_library import draw_random_entries
-from app.orchestrator_stub import execute_stub
+from .deepseek_sxrz import SXRZ_MAX_HAN, generate_internship_log_via_deepseek
+from .han_text import count_han_chars, truncate_to_max_han
+from .log_library import draw_random_entries
+from .orchestrator_stub import execute_stub
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 _STATIC = Path(__file__).resolve().parents[1] / "static"
@@ -84,7 +84,7 @@ class LocalSubmitBody(BaseModel):
         description="OpenAI 兼容网关，默认官方",
     )
     deepseek_model: str = Field(
-        default="deepseek-chat",
+        default="deepseek-v4-flash",
         max_length=64,
         description="对话模型名",
     )
@@ -132,12 +132,7 @@ class LocalSubmitBody(BaseModel):
             return self
         if sx:
             return self
-        if not act and not key:
-            return self
-        raise ValueError(
-            "使用大模型时需同时填写「今日派出所记事」与 DeepSeek API Key；"
-            "或改为只填写「实习日志正文」手写；或清空记事与 Key，由系统从 data/日志库.txt 为每个提交日各随机抽取一条。"
-        )
+        return self
 
 
 class TaskCreateResponse(BaseModel):
@@ -189,7 +184,7 @@ async def _run_task(task_id: str) -> None:
         act = str(p.get("station_activity_text") or "").strip()
         key = str(p.get("deepseek_api_key") or "").strip()
         base = str(p.get("deepseek_base_url") or "https://api.deepseek.com").strip()
-        model = str(p.get("deepseek_model") or "deepseek-chat").strip()
+        model = str(p.get("deepseek_model") or "deepseek-v4-flash").strip()
         sx_in = str(p.get("sxrz_text") or "").strip()
 
         raw_ld = p.get("log_dates") or []
@@ -276,7 +271,7 @@ async def _run_task(task_id: str) -> None:
                     "level": "info",
                     "step": "log_library",
                     "message": (
-                        f"已从 data/日志库.txt 为 {len(log_dates)} 个提交日各随机抽取一条（未调用大模型）"
+                        f"已从 backend/resources/logs_text.txt 为 {len(log_dates)} 个提交日各随机抽取一条（未调用大模型）"
                     ),
                     "detail": {
                         "library_total": lib_total,

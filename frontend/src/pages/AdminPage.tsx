@@ -25,6 +25,7 @@ import {
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { AdminSidebar } from '../layouts/AdminSidebar';
+import { Pager } from '../shared/components/Pager';
 import { Button } from '../shared/ui/button';
 import { Input } from '../shared/ui/input';
 import { Badge } from '../shared/ui/badge';
@@ -137,6 +138,11 @@ const contentSectionType: Record<string, ContentType> = {
   blogs: 'blog',
 };
 
+const ADMIN_PAGE_SIZE = 10;
+const ADMIN_PREVIEW_PAGE_SIZE = 5;
+const ADMIN_SERVICE_FILTER_PAGE_SIZE = 20;
+const ADMIN_METRICS_PAGE_SIZE = 30;
+
 export function AdminPage() {
   const location = useLocation();
   const navigate = useNavigate();
@@ -170,22 +176,27 @@ export function AdminPage() {
   const title = getSectionTitle(activeSection);
 
   return (
-    <div className="flex h-screen overflow-hidden bg-white">
+    <div className="flex h-screen overflow-hidden bg-white dark:bg-[#111111]">
       <AdminSidebar active={activeSection} onSelect={handleSectionSelect} />
 
       <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
-        <div className="flex h-14 items-center justify-between border-b border-gray-100 bg-white px-6">
+        <div className="flex h-14 items-center justify-between border-b border-gray-100 bg-white px-6 dark:border-white/10 dark:bg-[#171717]">
           <div>
-            <h1 className="text-sm font-medium text-gray-800">{title}</h1>
-            <p className="text-xs text-gray-400">真实 API 对接 · 接口异常会显示错误态</p>
+            <h1 className="text-sm font-medium text-gray-800 dark:text-white">{title}</h1>
+            <p
+              className="lumitime-script-logo text-lg leading-none text-gray-400 dark:text-white/42"
+              style={{ fontFamily: "'Brush Script MT', 'Segoe Script', 'Lucida Handwriting', cursive" }}
+            >
+              Lumitime
+            </p>
           </div>
-          <div className="flex items-center gap-2 text-xs text-gray-400">
+          <div className="flex items-center gap-2 text-xs text-gray-400 dark:text-white/40">
             <div className="h-2 w-2 rounded-full bg-emerald-400" />
             credentials: include
           </div>
         </div>
 
-        <main className="flex-1 overflow-auto p-6">
+        <main className="flex-1 overflow-auto overflow-x-hidden p-6">
           <motion.div
             key={activeSection}
             initial={{ opacity: 0, y: 8 }}
@@ -248,9 +259,9 @@ function OverviewSection() {
     setLoading(true);
     setError('');
     Promise.all([
-      adminListUsersApi({ page: 1, page_size: 100 }),
-      adminListServiceRequestsApi({ page: 1, page_size: 5 }),
-      adminListAuditLogsApi({ page: 1, page_size: 5 }),
+      adminListUsersApi({ page: 1, page_size: ADMIN_PREVIEW_PAGE_SIZE }),
+      adminListServiceRequestsApi({ page: 1, page_size: ADMIN_PREVIEW_PAGE_SIZE }),
+      adminListAuditLogsApi({ page: 1, page_size: ADMIN_PREVIEW_PAGE_SIZE }),
       adminListSnapshotsApi({ page: 1, page_size: 1 }),
     ])
       .then(([userPayload, recordPayload, auditPayload, snapshotPayload]) => {
@@ -342,6 +353,8 @@ function OverviewSection() {
 
 function InvitesSection({ requestConfirm }: { requestConfirm: (action: ConfirmAction) => void }) {
   const [items, setItems] = useState<BackendInvite[]>([]);
+  const [page, setPage] = useState(1);
+  const [total, setTotal] = useState(0);
   const [keyword, setKeyword] = useState('');
   const [status, setStatus] = useState<InviteStatusFilter>('all');
   const [loading, setLoading] = useState(true);
@@ -358,12 +371,17 @@ function InvitesSection({ requestConfirm }: { requestConfirm: (action: ConfirmAc
     let alive = true;
     setLoading(true);
     setError('');
-    adminListInvitesApi({ keyword, status, page: 1, page_size: 100 })
+    adminListInvitesApi({ keyword, status, page, page_size: ADMIN_PAGE_SIZE })
       .then(payload => {
-        if (alive) setItems(payload.data.items);
+        if (!alive) return;
+        setItems(payload.data.items);
+        setTotal(payload.data.total);
       })
       .catch(error => {
-        if (alive) setError(apiErrorMessage(error, '邀请码列表加载失败。'));
+        if (!alive) return;
+        setItems([]);
+        setTotal(0);
+        setError(apiErrorMessage(error, '邀请码列表加载失败。'));
       })
       .finally(() => {
         if (alive) setLoading(false);
@@ -371,7 +389,11 @@ function InvitesSection({ requestConfirm }: { requestConfirm: (action: ConfirmAc
     return () => {
       alive = false;
     };
-  }, [keyword, refresh, status]);
+  }, [keyword, page, refresh, status]);
+
+  useEffect(() => {
+    setPage(1);
+  }, [keyword, status]);
 
   const createInvite = async () => {
     setCreating(true);
@@ -464,6 +486,7 @@ function InvitesSection({ requestConfirm }: { requestConfirm: (action: ConfirmAc
           </DataRow>
         ))}
       </DataShell>
+      <Pager page={page} pageSize={ADMIN_PAGE_SIZE} total={total} loading={loading} onPageChange={setPage} />
 
       <Sheet open={createOpen} onOpenChange={setCreateOpen}>
         <SheetContent className="w-full sm:max-w-md">
@@ -513,6 +536,8 @@ function InvitesSection({ requestConfirm }: { requestConfirm: (action: ConfirmAc
 
 function UsersSection({ requestConfirm }: { requestConfirm: (action: ConfirmAction) => void }) {
   const [users, setUsers] = useState<BackendUser[]>([]);
+  const [page, setPage] = useState(1);
+  const [total, setTotal] = useState(0);
   const [keyword, setKeyword] = useState('');
   const [status, setStatus] = useState<'all' | 'active' | 'disabled'>('all');
   const [loading, setLoading] = useState(true);
@@ -526,12 +551,17 @@ function UsersSection({ requestConfirm }: { requestConfirm: (action: ConfirmActi
     let alive = true;
     setLoading(true);
     setError('');
-    adminListUsersApi({ keyword, status, page: 1, page_size: 100 })
+    adminListUsersApi({ keyword, status, page, page_size: ADMIN_PAGE_SIZE })
       .then(payload => {
-        if (alive) setUsers(payload.data.items);
+        if (!alive) return;
+        setUsers(payload.data.items);
+        setTotal(payload.data.total);
       })
       .catch(error => {
-        if (alive) setError(apiErrorMessage(error, '用户列表加载失败。'));
+        if (!alive) return;
+        setUsers([]);
+        setTotal(0);
+        setError(apiErrorMessage(error, '用户列表加载失败。'));
       })
       .finally(() => {
         if (alive) setLoading(false);
@@ -539,7 +569,11 @@ function UsersSection({ requestConfirm }: { requestConfirm: (action: ConfirmActi
     return () => {
       alive = false;
     };
-  }, [keyword, refresh, status]);
+  }, [keyword, page, refresh, status]);
+
+  useEffect(() => {
+    setPage(1);
+  }, [keyword, status]);
 
   const resetPassword = async () => {
     if (!resetUser) return;
@@ -620,6 +654,7 @@ function UsersSection({ requestConfirm }: { requestConfirm: (action: ConfirmActi
           </DataRow>
         ))}
       </DataShell>
+      <Pager page={page} pageSize={ADMIN_PAGE_SIZE} total={total} loading={loading} onPageChange={setPage} />
 
       <Sheet open={!!resetUser} onOpenChange={open => !open && setResetUser(null)}>
         <SheetContent className="w-full sm:max-w-md">
@@ -644,6 +679,8 @@ function UsersSection({ requestConfirm }: { requestConfirm: (action: ConfirmActi
 
 function ContentAdminSection({ type, requestConfirm }: { type: ContentType; requestConfirm: (action: ConfirmAction) => void }) {
   const [items, setItems] = useState<BackendContent[]>([]);
+  const [page, setPage] = useState(1);
+  const [total, setTotal] = useState(0);
   const [keyword, setKeyword] = useState('');
   const [status, setStatus] = useState<ContentStatus>('all');
   const [loading, setLoading] = useState(true);
@@ -662,12 +699,17 @@ function ContentAdminSection({ type, requestConfirm }: { type: ContentType; requ
     let alive = true;
     setLoading(true);
     setError('');
-    adminListContentsApi({ type, keyword, status, page: 1, page_size: 100 })
+    adminListContentsApi({ type, keyword, status, page, page_size: ADMIN_PAGE_SIZE })
       .then(payload => {
-        if (alive) setItems(payload.data.items);
+        if (!alive) return;
+        setItems(payload.data.items);
+        setTotal(payload.data.total);
       })
       .catch(error => {
-        if (alive) setError(apiErrorMessage(error, `${contentTypeLabel[type]}列表加载失败。`));
+        if (!alive) return;
+        setItems([]);
+        setTotal(0);
+        setError(apiErrorMessage(error, `${contentTypeLabel[type]}列表加载失败。`));
       })
       .finally(() => {
         if (alive) setLoading(false);
@@ -675,7 +717,11 @@ function ContentAdminSection({ type, requestConfirm }: { type: ContentType; requ
     return () => {
       alive = false;
     };
-  }, [keyword, refresh, status, type]);
+  }, [keyword, page, refresh, status, type]);
+
+  useEffect(() => {
+    setPage(1);
+  }, [keyword, status, type]);
 
   const openCreate = () => {
     setEditing(null);
@@ -840,6 +886,7 @@ function ContentAdminSection({ type, requestConfirm }: { type: ContentType; requ
           </DataRow>
         ))}
       </DataShell>
+      <Pager page={page} pageSize={ADMIN_PAGE_SIZE} total={total} loading={loading} onPageChange={setPage} />
 
       <Sheet open={sheetOpen} onOpenChange={open => !open && setSheetOpen(false)}>
         <SheetContent className="w-full overflow-y-auto sm:max-w-2xl">
@@ -956,6 +1003,8 @@ function ContentAdminSection({ type, requestConfirm }: { type: ContentType; requ
 
 function MessagesSection({ requestConfirm }: { requestConfirm: (action: ConfirmAction) => void }) {
   const [items, setItems] = useState<BackendMessage[]>([]);
+  const [page, setPage] = useState(1);
+  const [total, setTotal] = useState(0);
   const [keyword, setKeyword] = useState('');
   const [status, setStatus] = useState<MessageStatusFilter>('all');
   const [loading, setLoading] = useState(true);
@@ -966,12 +1015,17 @@ function MessagesSection({ requestConfirm }: { requestConfirm: (action: ConfirmA
     let alive = true;
     setLoading(true);
     setError('');
-    adminListMessagesApi({ keyword, status, page: 1, page_size: 100 })
+    adminListMessagesApi({ keyword, status, page, page_size: ADMIN_PAGE_SIZE })
       .then(payload => {
-        if (alive) setItems(payload.data.items);
+        if (!alive) return;
+        setItems(payload.data.items);
+        setTotal(payload.data.total);
       })
       .catch(error => {
-        if (alive) setError(apiErrorMessage(error, '留言列表加载失败。'));
+        if (!alive) return;
+        setItems([]);
+        setTotal(0);
+        setError(apiErrorMessage(error, '留言列表加载失败。'));
       })
       .finally(() => {
         if (alive) setLoading(false);
@@ -979,7 +1033,11 @@ function MessagesSection({ requestConfirm }: { requestConfirm: (action: ConfirmA
     return () => {
       alive = false;
     };
-  }, [keyword, refresh, status]);
+  }, [keyword, page, refresh, status]);
+
+  useEffect(() => {
+    setPage(1);
+  }, [keyword, status]);
 
   return (
     <div className="space-y-4">
@@ -1052,12 +1110,15 @@ function MessagesSection({ requestConfirm }: { requestConfirm: (action: ConfirmA
           </DataRow>
         ))}
       </DataShell>
+      <Pager page={page} pageSize={ADMIN_PAGE_SIZE} total={total} loading={loading} onPageChange={setPage} />
     </div>
   );
 }
 
 function ServicesSection({ requestConfirm }: { requestConfirm: (action: ConfirmAction) => void }) {
   const [items, setItems] = useState<BackendAdminService[]>([]);
+  const [page, setPage] = useState(1);
+  const [total, setTotal] = useState(0);
   const [keyword, setKeyword] = useState('');
   const [status, setStatus] = useState<EnabledStatusFilter>('all');
   const [loading, setLoading] = useState(true);
@@ -1072,12 +1133,17 @@ function ServicesSection({ requestConfirm }: { requestConfirm: (action: ConfirmA
     let alive = true;
     setLoading(true);
     setError('');
-    adminListServicesApi({ keyword, status, page: 1, page_size: 100 })
+    adminListServicesApi({ keyword, status, page, page_size: ADMIN_PAGE_SIZE })
       .then(payload => {
-        if (alive) setItems(payload.data.items);
+        if (!alive) return;
+        setItems(payload.data.items);
+        setTotal(payload.data.total);
       })
       .catch(error => {
-        if (alive) setError(apiErrorMessage(error, '服务列表加载失败。'));
+        if (!alive) return;
+        setItems([]);
+        setTotal(0);
+        setError(apiErrorMessage(error, '服务列表加载失败。'));
       })
       .finally(() => {
         if (alive) setLoading(false);
@@ -1085,7 +1151,11 @@ function ServicesSection({ requestConfirm }: { requestConfirm: (action: ConfirmA
     return () => {
       alive = false;
     };
-  }, [keyword, refresh, status]);
+  }, [keyword, page, refresh, status]);
+
+  useEffect(() => {
+    setPage(1);
+  }, [keyword, status]);
 
   const openCreate = () => {
     setEditing(null);
@@ -1216,6 +1286,7 @@ function ServicesSection({ requestConfirm }: { requestConfirm: (action: ConfirmA
           </DataRow>
         ))}
       </DataShell>
+      <Pager page={page} pageSize={ADMIN_PAGE_SIZE} total={total} loading={loading} onPageChange={setPage} />
 
       <Sheet open={sheetOpen} onOpenChange={open => !open && setSheetOpen(false)}>
         <SheetContent className="w-full overflow-y-auto sm:max-w-2xl">
@@ -1258,6 +1329,8 @@ function ServicesSection({ requestConfirm }: { requestConfirm: (action: ConfirmA
 function ServiceRecordsSection() {
   const [records, setRecords] = useState<BackendServiceRequest[]>([]);
   const [services, setServices] = useState<BackendAdminService[]>([]);
+  const [page, setPage] = useState(1);
+  const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [refresh, setRefresh] = useState(0);
@@ -1268,7 +1341,7 @@ function ServiceRecordsSection() {
   const [detailLoading, setDetailLoading] = useState(false);
 
   useEffect(() => {
-    adminListServicesApi({ page: 1, page_size: 100 })
+    adminListServicesApi({ page: 1, page_size: ADMIN_SERVICE_FILTER_PAGE_SIZE })
       .then(payload => setServices(payload.data.items))
       .catch(() => setServices([]));
   }, []);
@@ -1277,12 +1350,17 @@ function ServiceRecordsSection() {
     let alive = true;
     setLoading(true);
     setError('');
-    adminListServiceRequestsApi({ ...filters, page: 1, page_size: 100 })
+    adminListServiceRequestsApi({ ...filters, page, page_size: ADMIN_PAGE_SIZE })
       .then(payload => {
-        if (alive) setRecords(payload.data.items);
+        if (!alive) return;
+        setRecords(payload.data.items);
+        setTotal(payload.data.total);
       })
       .catch(error => {
-        if (alive) setError(apiErrorMessage(error, '服务提交记录加载失败。'));
+        if (!alive) return;
+        setRecords([]);
+        setTotal(0);
+        setError(apiErrorMessage(error, '服务提交记录加载失败。'));
       })
       .finally(() => {
         if (alive) setLoading(false);
@@ -1290,7 +1368,11 @@ function ServiceRecordsSection() {
     return () => {
       alive = false;
     };
-  }, [filters, refresh]);
+  }, [filters, page, refresh]);
+
+  useEffect(() => {
+    setPage(1);
+  }, [filters.failure_code, filters.service_id, filters.service_request_id, filters.status, filters.user_id]);
 
   const openDetail = async (record: BackendServiceRequest) => {
     setDetailOpen(true);
@@ -1372,6 +1454,7 @@ function ServiceRecordsSection() {
           </button>
         ))}
       </DataShell>
+      <Pager page={page} pageSize={ADMIN_PAGE_SIZE} total={total} loading={loading} onPageChange={setPage} />
       <p className="text-xs text-gray-400">记录详情与导出均不展示学生 App 密码、完整账号、Token、Cookie 或 Authorization。</p>
 
       <Sheet open={detailOpen} onOpenChange={open => !open && setDetailOpen(false)}>
@@ -1421,6 +1504,8 @@ function ServiceRecordsSection() {
 function AuditSection() {
   const [items, setItems] = useState<BackendAuditLog[]>([]);
   const [filters, setFilters] = useState({ actor_user_id: '', action: '', service_request_id: '' });
+  const [page, setPage] = useState(1);
+  const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [refresh, setRefresh] = useState(0);
@@ -1432,12 +1517,17 @@ function AuditSection() {
     let alive = true;
     setLoading(true);
     setError('');
-    adminListAuditLogsApi({ ...filters, page: 1, page_size: 100 })
+    adminListAuditLogsApi({ ...filters, page, page_size: ADMIN_PAGE_SIZE })
       .then(payload => {
-        if (alive) setItems(payload.data.items);
+        if (!alive) return;
+        setItems(payload.data.items);
+        setTotal(payload.data.total);
       })
       .catch(error => {
-        if (alive) setError(apiErrorMessage(error, '审计记录加载失败。'));
+        if (!alive) return;
+        setItems([]);
+        setTotal(0);
+        setError(apiErrorMessage(error, '审计记录加载失败。'));
       })
       .finally(() => {
         if (alive) setLoading(false);
@@ -1445,7 +1535,11 @@ function AuditSection() {
     return () => {
       alive = false;
     };
-  }, [filters, refresh]);
+  }, [filters, page, refresh]);
+
+  useEffect(() => {
+    setPage(1);
+  }, [filters.action, filters.actor_user_id, filters.service_request_id]);
 
   const openDetail = async (audit: BackendAuditLog) => {
     setDetailOpen(true);
@@ -1498,6 +1592,7 @@ function AuditSection() {
           </button>
         ))}
       </DataShell>
+      <Pager page={page} pageSize={ADMIN_PAGE_SIZE} total={total} loading={loading} onPageChange={setPage} />
 
       <Sheet open={detailOpen} onOpenChange={open => !open && setDetailOpen(false)}>
         <SheetContent className="w-full overflow-y-auto sm:max-w-2xl">
@@ -1527,6 +1622,8 @@ function AuditSection() {
 
 function MetricsSection() {
   const [items, setItems] = useState<DashboardSnapshot[]>([]);
+  const [page, setPage] = useState(1);
+  const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [refresh, setRefresh] = useState(0);
@@ -1535,12 +1632,17 @@ function MetricsSection() {
     let alive = true;
     setLoading(true);
     setError('');
-    adminListSnapshotsApi({ page: 1, page_size: 90 })
+    adminListSnapshotsApi({ page, page_size: ADMIN_METRICS_PAGE_SIZE })
       .then(payload => {
-        if (alive) setItems(payload.data.items);
+        if (!alive) return;
+        setItems(payload.data.items);
+        setTotal(payload.data.total);
       })
       .catch(error => {
-        if (alive) setError(apiErrorMessage(error, '统计快照加载失败。'));
+        if (!alive) return;
+        setItems([]);
+        setTotal(0);
+        setError(apiErrorMessage(error, '统计快照加载失败。'));
       })
       .finally(() => {
         if (alive) setLoading(false);
@@ -1548,7 +1650,7 @@ function MetricsSection() {
     return () => {
       alive = false;
     };
-  }, [refresh]);
+  }, [page, refresh]);
 
   const latest = items[0];
 
@@ -1593,6 +1695,7 @@ function MetricsSection() {
               </DataRow>
             ))}
           </DataShell>
+          <Pager page={page} pageSize={ADMIN_METRICS_PAGE_SIZE} total={total} loading={loading} onPageChange={setPage} />
         </>
       )}
     </div>

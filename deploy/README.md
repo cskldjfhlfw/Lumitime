@@ -22,9 +22,19 @@ mkdir -p /opt/lumitime/app
 sudo mkdir -p /opt/lumitime/data/postgres /opt/lumitime/data/uploads /opt/lumitime/backups /opt/lumitime/certs
 sudo cp fullchain.pem /opt/lumitime/certs/fullchain.pem
 sudo cp privkey.pem /opt/lumitime/certs/privkey.pem
+sudo chown root:root /opt/lumitime/certs/fullchain.pem /opt/lumitime/certs/privkey.pem
+sudo chmod 644 /opt/lumitime/certs/fullchain.pem
+sudo chmod 600 /opt/lumitime/certs/privkey.pem
 ```
 
 `deploy/.env.example` 里 `LUMITIME_CERT_DIR` 指向宿主机证书目录，Nginx 进程内部使用 `/etc/nginx/certs/fullchain.pem` 和 `/etc/nginx/certs/privkey.pem`。
+
+如果使用本仓库旁边的 `25638083_yeen666.cn_nginx` 证书包，上传到服务器后按 Compose 期望的文件名落盘：
+
+```bash
+sudo install -m 644 25638083_yeen666.cn_nginx/yeen666.cn.pem /opt/lumitime/certs/fullchain.pem
+sudo install -m 600 25638083_yeen666.cn_nginx/yeen666.cn.key /opt/lumitime/certs/privkey.pem
+```
 
 创建生产环境变量：
 
@@ -32,7 +42,19 @@ sudo cp privkey.pem /opt/lumitime/certs/privkey.pem
 cp deploy/.env.example deploy/.env
 ```
 
-必须修改 `deploy/.env` 中的域名、数据库密码、`LUMITIME_DATABASE_URL`、`LUMITIME_SECRET_KEY`、`LUMITIME_BOOTSTRAP_TOKEN` 和 `LUMITIME_CORS_ORIGINS`。如果数据库密码包含特殊字符，`LUMITIME_DATABASE_URL` 中的密码部分需要 URL encode。
+必须修改 `deploy/.env` 中的域名、数据库密码、`LUMITIME_DATABASE_URL`、`LUMITIME_SECRET_KEY`、`LUMITIME_BOOTSTRAP_TOKEN` 和 `LUMITIME_CORS_ORIGINS`。`LUMITIME_SECRET_KEY` 生产环境必须是至少 32 字符的非默认密钥，`LUMITIME_CORS_ORIGINS` 不能留空或使用 `*`。如果数据库密码包含特殊字符，`LUMITIME_DATABASE_URL` 中的密码部分需要 URL encode。
+
+`yeen666.cn` 的关键生产变量示例：
+
+```dotenv
+LUMITIME_SERVER_NAME=yeen666.cn
+LUMITIME_CORS_ORIGINS=https://yeen666.cn
+LUMITIME_CERT_DIR=/opt/lumitime/certs
+LUMITIME_SSL_CERTIFICATE=/etc/nginx/certs/fullchain.pem
+LUMITIME_SSL_CERTIFICATE_KEY=/etc/nginx/certs/privkey.pem
+```
+
+如果同时解析 `www.yeen666.cn`，需要把 `LUMITIME_SERVER_NAME` 写成 `yeen666.cn www.yeen666.cn`，并把 `LUMITIME_CORS_ORIGINS` 写成 `https://yeen666.cn,https://www.yeen666.cn`。
 
 构建镜像、执行迁移并启动：
 

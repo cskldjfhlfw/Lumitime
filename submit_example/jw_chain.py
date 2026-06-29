@@ -17,8 +17,27 @@ from urllib.parse import quote, urlencode
 import requests
 from zoneinfo import ZoneInfo
 
-_REPO = Path(__file__).resolve().parents[2]
-_DOSAVE_TEMPLATE = _REPO / "url梳理" / "dosave.txt"
+_REPO = Path(__file__).resolve().parents[1]
+_DOSAVE_TEMPLATE_CANDIDATES = (
+    _REPO / "backend" / "resources" / "dosave.txt",
+    _REPO / "url梳理" / "dosave.txt",
+    _REPO / "submit_example" / "url梳理" / "dosave.txt",
+    _REPO / "submit_example" / "dosave.txt",
+)
+_DOSAVE_TEMPLATE = next((path for path in _DOSAVE_TEMPLATE_CANDIDATES if path.is_file()), _DOSAVE_TEMPLATE_CANDIDATES[0])
+RUNTIME_FORM_FIELDS = {
+    "XSXM",
+    "XSXH",
+    "SXRZ",
+    "BGRQ",
+    "OPERATETIME",
+    "SXJXRW_ID",
+    "XY_ID",
+    "OPERATERCODE",
+    "SY_CREATEUSERID",
+    "SY_CREATEUSER",
+    "SY_CREATEUSERNAME",
+}
 
 JW_MOBILE_UA = (
     "Mozilla/5.0 (Linux; Android 16; V2227A Build/BP2A.250605.031.A3; wv) AppleWebKit/537.36 "
@@ -151,18 +170,22 @@ def _extract_from_responses(blob: str, keys: tuple[str, ...]) -> dict[str, str]:
     return out
 
 
-def _dosave_kv_preview(form: dict[str, str], pairs: list[tuple[str, str]]) -> str:
-    """按 dosave 模板键顺序生成 Key=…; Value=… 文本，便于与标准抓包对照。"""
+def _ordered_dosave_pairs(form: dict[str, str], pairs: list[tuple[str, str]]) -> list[tuple[str, str]]:
+    """按 dosave 模板键顺序生成提交键值，运行时字段也落回模板原位置。"""
     keys_seen: set[str] = set()
-    lines: list[str] = []
+    ordered: list[tuple[str, str]] = []
     for k, _ in pairs:
-        if k in form:
-            lines.append(f"Key={k}; Value={form[k]}")
-            keys_seen.add(k)
+        ordered.append((k, form.get(k, "")))
+        keys_seen.add(k)
     extra = sorted(k for k in form if k not in keys_seen)
     for k in extra:
-        lines.append(f"Key={k}; Value={form[k]}")
-    return "\n".join(lines)
+        ordered.append((k, form[k]))
+    return ordered
+
+
+def _dosave_kv_preview(ordered_pairs: list[tuple[str, str]]) -> str:
+    """生成 Key=…; Value=… 文本，便于与标准抓包对照。"""
+    return "\n".join(f"Key={key}; Value={value}" for key, value in ordered_pairs)
 
 
 def _jw_auth_header(session: requests.Session) -> str | None:
@@ -449,8 +472,26 @@ def run_jw_chain(
 
         blob = task_text + "\n" + init_text
         extracted = _extract_from_responses(blob, keys_from_api)
+        missing_api_keys = [key for key in keys_from_api if not extracted.get(key)]
+        if missing_api_keys:
+            logs.append(
+                _log(
+                    "jw_dynamic_fields",
+                    "教务接口响应中未解析到部分动态字段",
+                    "warn",
+                    detail={"missing_keys": missing_api_keys, "merged_from_api_keys": list(extracted.keys())},
+                )
+            )
+        else:
+            logs.append(
+                _log(
+                    "jw_dynamic_fields",
+                    "已从教务接口响应解析动态字段",
+                    detail={"merged_from_api_keys": list(extracted.keys())},
+                )
+            )
 
-        form: dict[str, str] = {k: v for k, v in pairs}
+        form: dict[str, str] = {k: v for k, v in pairs if k not in RUNTIME_FORM_FIELDS}
         form["XSXH"] = student_no.strip()
         form["XSXM"] = display_name.strip()
         form["SY_CREATEUSERNAME"] = display_name.strip()
@@ -486,8 +527,9 @@ def run_jw_chain(
             )
         form["XNXQ"] = XNXQ_CODE
 
-        dosave_kv_preview = _dosave_kv_preview(form, pairs)
-        body = urlencode(form, doseq=True)
+        ordered_form_pairs = _ordered_dosave_pairs(form, pairs)
+        dosave_kv_preview = _dosave_kv_preview(ordered_form_pairs)
+        body = urlencode(ordered_form_pairs, doseq=True)
         logs.append(
             _log(
                 "jw_do_save_preview",

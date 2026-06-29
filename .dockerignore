@@ -19,6 +19,11 @@ deploy/compose.local.override.yml
 deploy/certs/
 deploy/backups/
 .deploy-local/
+*_nginx/
+*.key
+*.pem
+.superpowers/
+docs/superpowers/plans/
 
 *.log
 *.tmp

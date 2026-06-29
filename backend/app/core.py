@@ -35,6 +35,7 @@ ERROR_HTTP_STATUS = {
     "NOT_FOUND": status.HTTP_404_NOT_FOUND,
     "CONFLICT": status.HTTP_409_CONFLICT,
     "RATE_LIMITED": status.HTTP_429_TOO_MANY_REQUESTS,
+    "PAYLOAD_TOO_LARGE": status.HTTP_413_CONTENT_TOO_LARGE,
     "INTERNAL_ERROR": status.HTTP_500_INTERNAL_SERVER_ERROR,
     "SERVICE_NOT_INTEGRATED": status.HTTP_501_NOT_IMPLEMENTED,
 }
@@ -153,8 +154,8 @@ def summarize_user_agent(user_agent: str | None) -> str | None:
 
 
 def request_meta(request: Request) -> tuple[str | None, str | None]:
-    forwarded = request.headers.get("x-forwarded-for")
-    ip = forwarded.split(",", 1)[0].strip() if forwarded else (request.client.host if request.client else None)
+    real_ip = request.headers.get("x-real-ip")
+    ip = real_ip.strip() if real_ip else (request.client.host if request.client else None)
     return hash_ip(ip), summarize_user_agent(request.headers.get("user-agent"))
 
 
@@ -259,10 +260,16 @@ def csv_response(filename: str, rows: list[dict[str, Any]], fieldnames: list[str
     writer = csv.DictWriter(buffer, fieldnames=fieldnames, extrasaction="ignore")
     writer.writeheader()
     for row in rows:
-        writer.writerow({key: sanitize_text(str(row.get(key, ""))) for key in fieldnames})
+        writer.writerow({key: csv_safe_cell(sanitize_text(str(row.get(key, "")))) for key in fieldnames})
     data = io.BytesIO(buffer.getvalue().encode("utf-8-sig"))
     headers = {"Content-Disposition": f'attachment; filename="{filename}"'}
     return StreamingResponse(data, media_type="text/csv; charset=utf-8", headers=headers)
+
+
+def csv_safe_cell(value: str) -> str:
+    if value and value[0] in {"=", "+", "-", "@", "\t", "\r", "\n"}:
+        return "'" + value
+    return value
 
 
 def new_uuid() -> str:

@@ -98,7 +98,13 @@ def download_attachment(work_id: str, attachment_id: str, request: Request, db: 
         raise ApiError("NOT_FOUND", "附件文件不存在。")
     write_audit(db, request=request, actor=user, action="download_attachment", resource_type="content_attachment", resource_id=attachment.id)
     db.commit()
-    return FileResponse(path, media_type=attachment.file_type or "application/octet-stream", filename=attachment.filename)
+    return FileResponse(
+        path,
+        media_type=attachment.file_type or "application/octet-stream",
+        filename=attachment.filename,
+        headers={"X-Content-Type-Options": "nosniff"},
+        content_disposition_type="attachment",
+    )
 
 
 @router.get("/blogs")

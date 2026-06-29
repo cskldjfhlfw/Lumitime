@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import json
-import time
 from datetime import timedelta
 from threading import Lock
 from time import monotonic
@@ -9,9 +8,12 @@ from typing import Any
 
 from sqlalchemy import select
 
+from .config import settings
 from .core import mask_account, now_utc, prefixed_id, sanitize_text
 from .database import SessionLocal
+from .log_submit import PreparedLogContent, prepare_log_content
 from .models import ServiceExecutionLog, ServiceRequest, WorkstationService
+from .real_log_submit import RealSubmitError, run_real_log_submit
 
 
 TERMINAL_FAILURE_SUMMARIES = {
@@ -25,28 +27,43 @@ TERMINAL_FAILURE_SUMMARIES = {
     "SERVICE_NOT_INTEGRATED": "服务暂未接入真实脚本，请稍后再试。",
 }
 
+LOG_AUTO_SUBMIT_SCRIPT_KEY = "log_auto_submit"
 CREDENTIAL_TTL_SECONDS = 300.0
-_CREDENTIALS: dict[str, tuple[str, str, float]] = {}
+_CREDENTIALS: dict[str, tuple[str, str, dict[str, Any], float]] = {}
 _CREDENTIAL_LOCK = Lock()
 
 
-def enqueue_service_credentials(service_request_public_id: str, student_account: str, student_password: str) -> None:
-    expires_at = monotonic() + CREDENTIAL_TTL_SECONDS
+def _prune_expired_credentials(now: float) -> None:
+    expired = [request_id for request_id, (*_, expires_at) in _CREDENTIALS.items() if now > expires_at]
+    for request_id in expired:
+        _CREDENTIALS.pop(request_id, None)
+
+
+def enqueue_service_credentials(
+    service_request_public_id: str,
+    student_account: str,
+    student_password: str,
+    raw_task_config: dict[str, Any] | None = None,
+) -> None:
+    now = monotonic()
+    expires_at = now + CREDENTIAL_TTL_SECONDS
     with _CREDENTIAL_LOCK:
-        _CREDENTIALS[service_request_public_id] = (student_account, student_password, expires_at)
+        _prune_expired_credentials(now)
+        _CREDENTIALS[service_request_public_id] = (student_account, student_password, raw_task_config or {}, expires_at)
 
 
-def _pop_service_credentials(service_request_public_id: str) -> tuple[str, str] | None:
+def _pop_service_credentials(service_request_public_id: str) -> tuple[str, str, dict[str, Any]] | None:
     with _CREDENTIAL_LOCK:
         credentials = _CREDENTIALS.pop(service_request_public_id, None)
     if credentials is None:
         return None
-    student_account, student_password, expires_at = credentials
+    student_account, student_password, raw_task_config, expires_at = credentials
     if monotonic() > expires_at:
         student_account = ""
         student_password = ""
+        raw_task_config = {}
         return None
-    return student_account, student_password
+    return student_account, student_password, raw_task_config
 
 
 def _append_log(
@@ -69,6 +86,44 @@ def _append_log(
             expires_at=record.expires_at,
         )
     )
+
+
+def _log_auto_submit_steps(student_account: str, content: PreparedLogContent) -> list[tuple[str, str]]:
+    return [
+        ("mvp_mode", "本地验收干跑：不请求真实 SSO、教务或第三方接口。"),
+        ("validate", f"校验模板字段，账号={mask_account(student_account)}，日期={','.join(content.target_dates)}。"),
+        (
+            "sxrz_prepare",
+            f"准备实习日志正文来源：{content.source_label}，生成正文数={len(content.texts_by_date)}，汉字数={content.han_chars}"
+            + (f"，日志库总数={content.library_total}" if content.library_total is not None else "")
+            + "。",
+        ),
+        ("sso_login", f"模拟 SSO 登录页、验证码、RSA 加密与登录提交，账号={student_account}，password=[REDACTED_PASSWORD]。"),
+        ("chaoxing_cas", "模拟超星 CAS / 教务桥接链路。"),
+        ("jw_prepare", "模拟 app/index -> h5 -> getCurrentTask -> doInitForm。"),
+        ("jw_do_save", f"模拟按模板 POST doSave，提交日期数={len(content.target_dates)}。"),
+    ]
+
+
+def _generic_steps(student_account: str) -> list[tuple[str, str]]:
+    return [
+        ("validate", f"开始校验服务输入，账号={mask_account(student_account)}"),
+        ("login", f"开始登录学生学习 App，账号={student_account}，password=[REDACTED_PASSWORD]"),
+        ("prepare", "准备学习日志提交参数。"),
+        ("submit", "提交学习日志。"),
+    ]
+
+
+def _run_simulated_steps(db, record: ServiceRequest, student_account: str, steps: list[tuple[str, str]]) -> None:
+    for idx, (step, message) in enumerate(steps, start=1):
+        _append_log(db, record, idx, "info", step, message, student_account)
+        db.commit()
+
+
+def _append_real_submit_events(db, record: ServiceRequest, student_account: str, events: list[Any]) -> None:
+    for idx, event in enumerate(events, start=1):
+        _append_log(db, record, idx, getattr(event, "level", "info"), getattr(event, "step", "submit_example"), getattr(event, "message", ""), student_account)
+    db.commit()
 
 
 def _mark_missing_credentials(service_request_public_id: str) -> None:
@@ -94,12 +149,13 @@ def run_queued_service_request(service_request_public_id: str) -> None:
     if credentials is None:
         _mark_missing_credentials(service_request_public_id)
         return
-    student_account, student_password = credentials
+    student_account, student_password, raw_task_config = credentials
     try:
-        _run_service_request_with_credentials(service_request_public_id, student_account, student_password)
+        _run_service_request_with_credentials(service_request_public_id, student_account, student_password, raw_task_config)
     finally:
         student_account = ""
         student_password = ""
+        raw_task_config = {}
 
 
 def run_service_request(service_request_public_id: str, student_account: str, student_password: str) -> None:
@@ -107,13 +163,17 @@ def run_service_request(service_request_public_id: str, student_account: str, st
     run_queued_service_request(service_request_public_id)
 
 
-def _run_service_request_with_credentials(service_request_public_id: str, student_account: str, student_password: str) -> None:
-    """Run a simulated workstation request.
+def _run_service_request_with_credentials(
+    service_request_public_id: str,
+    student_account: str,
+    student_password: str,
+    raw_task_config: dict[str, Any] | None = None,
+) -> None:
+    """Run a workstation request.
 
-    Credentials are passed in memory by FastAPI background tasks and are never saved.
+    Credentials are popped from the short-lived in-memory queue and are never saved.
     The function deliberately avoids logging the raw password.
     """
-    del student_password
     started = now_utc()
     db = SessionLocal()
     try:
@@ -136,17 +196,41 @@ def _run_service_request_with_credentials(service_request_public_id: str, studen
             except json.JSONDecodeError:
                 task_config = {}
 
-        steps: list[tuple[str, str]] = [
-            ("validate", f"开始校验服务输入，账号={mask_account(student_account)}"),
-            ("login", f"开始登录学生学习 App，账号={student_account}，password=[REDACTED_PASSWORD]"),
-            ("prepare", "准备学习日志提交参数。"),
-            ("submit", "提交学习日志。"),
-        ]
+        is_log_auto_submit = service is not None and service.script_key == LOG_AUTO_SUBMIT_SCRIPT_KEY
+        real_log_submit = is_log_auto_submit and settings.real_log_submit_enabled
+        prepared_content: PreparedLogContent | None = None
+        steps: list[tuple[str, str]] = []
 
-        for idx, (step, message) in enumerate(steps, start=1):
-            _append_log(db, record, idx, "info", step, message, student_account)
-            db.commit()
-            time.sleep(0.08)
+        if real_log_submit:
+            try:
+                submit_result = run_real_log_submit(
+                    student_account=student_account,
+                    student_password=student_password,
+                    raw_task_config=raw_task_config or {},
+                    sanitized_task_config=task_config,
+                )
+            except RealSubmitError as exc:
+                _append_real_submit_events(db, record, student_account, exc.events)
+                failure_code = exc.failure_code
+                finished = now_utc()
+                record.status = "timeout" if failure_code == "TIMEOUT" else "failed"
+                record.failure_code = failure_code
+                record.finished_at = finished
+                record.duration_ms = int((finished - started).total_seconds() * 1000)
+                record.result_summary = _failure_summary_with_detail(
+                    failure_code,
+                    str(exc),
+                    student_account=student_account,
+                )
+                _append_log(db, record, len(exc.events) + 1, "error", "failed", record.result_summary, student_account)
+                db.commit()
+                return
+            prepared_content = submit_result.content
+            _append_real_submit_events(db, record, student_account, submit_result.events)
+        else:
+            prepared_content = prepare_log_content(raw_task_config or {}, task_config) if is_log_auto_submit else None
+            steps = _log_auto_submit_steps(student_account, prepared_content) if prepared_content is not None else _generic_steps(student_account)
+            _run_simulated_steps(db, record, student_account, steps)
 
         forced = str(task_config.get("force_result") or task_config.get("simulate") or "").upper()
         failure_code: str | None = None
@@ -157,16 +241,16 @@ def _run_service_request_with_credentials(service_request_public_id: str, studen
         elif record.script_version and record.script_version != "v0.1.0-mock":
             final_status = "not_integrated"
             failure_code = "SERVICE_NOT_INTEGRATED"
-        elif "TIMEOUT" in forced or "timeout" in account_lower:
+        elif not real_log_submit and ("TIMEOUT" in forced or "timeout" in account_lower):
             final_status = "timeout"
             failure_code = "TIMEOUT"
-        elif "AUTH" in forced or "fail" in account_lower:
+        elif not real_log_submit and ("AUTH" in forced or "fail" in account_lower):
             final_status = "failed"
             failure_code = "AUTH_FAILED"
-        elif forced in TERMINAL_FAILURE_SUMMARIES:
+        elif not real_log_submit and forced in TERMINAL_FAILURE_SUMMARIES:
             final_status = "failed"
             failure_code = forced
-        elif forced in {"NOT_INTEGRATED", "SERVICE_NOT_INTEGRATED"}:
+        elif not real_log_submit and forced in {"NOT_INTEGRATED", "SERVICE_NOT_INTEGRATED"}:
             final_status = "not_integrated"
             failure_code = "SERVICE_NOT_INTEGRATED"
 
@@ -177,8 +261,17 @@ def _run_service_request_with_credentials(service_request_public_id: str, studen
         record.finished_at = finished
         record.duration_ms = duration_ms
         if final_status == "success":
-            record.result_summary = "已完成日志自动提交模拟流程。"
-            _append_log(db, record, len(steps) + 1, "info", "done", "服务执行成功。", student_account)
+            record.result_summary = (
+                "已完成 submit_example 真实提交脚本执行。"
+                if real_log_submit
+                else "已按 submit_example 模板完成本地干跑验收，未请求真实目标服务器。"
+                if is_log_auto_submit
+                else "已完成日志自动提交模拟流程。"
+            )
+            next_sequence = len(steps) + 1
+            if real_log_submit:
+                next_sequence = (db.scalar(select(ServiceExecutionLog.sequence).where(ServiceExecutionLog.service_request_id == record.service_request_id).order_by(ServiceExecutionLog.sequence.desc()).limit(1)) or 0) + 1
+            _append_log(db, record, next_sequence, "info", "done", record.result_summary, student_account)
         else:
             record.result_summary = TERMINAL_FAILURE_SUMMARIES.get(failure_code or "UNKNOWN_ERROR")
             _append_log(db, record, len(steps) + 1, "warn", "failed", record.result_summary or "服务执行失败。", student_account)
@@ -200,11 +293,22 @@ def _run_service_request_with_credentials(service_request_public_id: str, studen
         # Keep the raw credential lifetime scoped to this call.
         student_account = ""
         student_password = ""
+        raw_task_config = {}
         db.close()
 
 
 def service_request_expiry() -> Any:
     return now_utc() + timedelta(days=180)
+
+
+def _failure_summary_with_detail(failure_code: str, detail: str, *, student_account: str | None = None) -> str:
+    base = TERMINAL_FAILURE_SUMMARIES.get(failure_code, TERMINAL_FAILURE_SUMMARIES["SCRIPT_ERROR"])
+    cleaned = sanitize_text((detail or "").strip(), student_account=student_account)
+    if not cleaned:
+        return base
+    if len(cleaned) > 220:
+        cleaned = cleaned[:220].rstrip() + "..."
+    return f"{base} {cleaned}"
 
 
 def reconcile_pending_requests_after_startup() -> None:

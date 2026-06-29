@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router';
 import {
   BookOpen,
@@ -17,6 +17,9 @@ import {
   UserCircle,
 } from 'lucide-react';
 import { Button } from '../shared/ui/button';
+import PillNav, { type PillNavItem } from '../shared/components/PillNav';
+import { NightModeToggle } from '../shared/components/NightModeToggle';
+import { useNightMode } from '../app/providers/NightModeProvider';
 import { cn } from '../shared/lib/utils';
 
 interface MainNavProps {
@@ -30,6 +33,7 @@ export function MainNav({ isLoggedIn, isAdmin, userLabel, onLogout }: MainNavPro
   const navigate = useNavigate();
   const location = useLocation();
   const [menuOpen, setMenuOpen] = useState(false);
+  const { nightMode, toggleNightMode } = useNightMode();
 
   const logoutAndReturnHome = () => {
     onLogout();
@@ -42,46 +46,67 @@ export function MainNav({ isLoggedIn, isAdmin, userLabel, onLogout }: MainNavPro
     setMenuOpen(false);
   };
 
-  const navItems = [
-    { to: '/', icon: <Home size={14} />, label: '首页', show: true },
-    { to: '/notes', icon: <PenLine size={14} />, label: '随记', show: true },
+  const navItems = useMemo(() => [
     { to: '/dashboard', icon: <Monitor size={14} />, label: '大屏看板', show: true },
+    { to: '/notes', icon: <PenLine size={14} />, label: '随记', show: true },
+    { to: '/', icon: <Home size={14} />, label: '首页', show: !isLoggedIn },
     { to: '/scripts', icon: <Code2 size={14} />, label: '脚本分享', show: isLoggedIn },
     { to: '/works', icon: <ImageIcon size={14} />, label: '个人作品', show: isLoggedIn },
     { to: '/blogs', icon: <BookOpen size={14} />, label: '经验心得', show: isLoggedIn },
     { to: '/workstation', icon: <LayoutDashboard size={14} />, label: '工作站', show: isLoggedIn },
     { to: '/me', icon: <UserCircle size={14} />, label: '个人中心', show: isLoggedIn },
     { to: '/admin', icon: <User size={14} />, label: '管理后台', show: !!isAdmin },
-  ];
+  ], [isAdmin, isLoggedIn]);
+  const visibleNavItems = navItems.filter(item => item.show && item.to !== '/me');
+  const activeHref = visibleNavItems.find(item => isRouteActive(item.to, location.pathname))?.to || visibleNavItems[0]?.to || '/notes';
+  const pillItems: PillNavItem[] = visibleNavItems.map(item => ({
+    href: item.to,
+    label: item.label,
+    icon: item.icon,
+  }));
 
   return (
-    <nav className="sticky top-0 z-40 w-full border-b border-black/10 bg-white/92 backdrop-blur-md">
-      <div className="max-w-6xl mx-auto px-6 h-14 flex items-center justify-between">
-        <Link
-          to="/"
-          className="flex items-center gap-2 text-black no-underline group"
-        >
-          <div className="w-7 h-7 rounded-full bg-black flex items-center justify-center shadow-[0_0_18px_rgba(0,0,0,0.16)]">
-            <div className="w-2 h-2 rounded-full bg-white shadow-[0_0_10px_rgba(255,255,255,0.8)]" />
-          </div>
-          <span
-            className="text-base tracking-wide whitespace-nowrap"
-            style={{ fontFamily: "'Ma Shan Zheng', serif" }}
+    <nav className="sticky top-0 z-40 w-full overflow-visible border-b border-[#e8e5dc] bg-[#fbfaf7]/88 backdrop-blur-xl dark:border-white/10 dark:bg-[#181818]/88">
+      <NightModeToggle
+        active={nightMode}
+        onToggle={toggleNightMode}
+        className="fixed left-4 top-4 z-[60] sm:left-6"
+      />
+      <div className="mx-auto flex h-16 max-w-6xl items-center justify-between px-5 sm:px-6">
+        <div className="group flex items-center gap-2 pl-16 text-[#171717] sm:pl-20 lg:hidden">
+          <Link
+            to="/"
+            className="lumitime-script-logo whitespace-nowrap text-2xl text-[#171717] dark:text-[#f5f2ea]"
+            style={{ fontFamily: "'Brush Script MT', 'Segoe Script', 'Lucida Handwriting', cursive" }}
           >
-            拾光筑梦
-          </span>
-        </Link>
+            Lumitime
+          </Link>
+        </div>
 
-        <div className="hidden lg:flex items-center gap-1">
-          {navItems.filter(item => item.show && item.to !== '/me').map(item => (
-            <NavLink
-              key={item.to}
-              to={item.to}
-              icon={item.icon}
-              label={item.label}
-              active={item.to === '/' ? location.pathname === '/' : location.pathname.startsWith(item.to)}
-            />
-          ))}
+        <div className="hidden min-w-0 flex-1 items-center lg:flex">
+          <PillNav
+            brand={(
+              <Link
+                to="/"
+                className="lumitime-script-logo whitespace-nowrap text-2xl text-[#171717] dark:text-[#f5f2ea]"
+                style={{ fontFamily: "'Brush Script MT', 'Segoe Script', 'Lucida Handwriting', cursive" }}
+              >
+                Lumitime
+              </Link>
+            )}
+            logoAlt="Lumitime"
+            items={pillItems}
+            activeHref={activeHref}
+            onNavigate={href => navigate(href)}
+            className="max-w-full"
+            ease="cubic-bezier(0.2, 0.8, 0.2, 1)"
+            baseColor={nightMode ? '#f5f2ea' : '#5f5a52'}
+            pillColor={nightMode ? '#f5f2ea' : '#171717'}
+            hoveredPillTextColor={nightMode ? '#171717' : '#ffffff'}
+            pillTextColor={nightMode ? '#171717' : '#ffffff'}
+            theme={nightMode ? 'dark' : 'light'}
+            initialLoadAnimation
+          />
         </div>
 
         <div className="flex items-center gap-2">
@@ -91,7 +116,7 @@ export function MainNav({ isLoggedIn, isAdmin, userLabel, onLogout }: MainNavPro
                 variant="ghost"
                 size="sm"
                 onClick={() => navigate('/me')}
-                className="hidden md:inline-flex gap-1.5 text-gray-600 hover:text-black"
+                className="hidden gap-1.5 text-[#6f6d67] hover:bg-white hover:text-[#171717] dark:text-white/70 dark:hover:bg-white/10 dark:hover:text-white md:inline-flex"
               >
                 <UserCircle size={14} />
                 {userLabel || '个人中心'}
@@ -100,7 +125,7 @@ export function MainNav({ isLoggedIn, isAdmin, userLabel, onLogout }: MainNavPro
                 variant="ghost"
                 size="sm"
                 onClick={logoutAndReturnHome}
-                className="gap-1.5 text-gray-600"
+                className="gap-1.5 text-[#6f6d67] hover:bg-white hover:text-[#171717] dark:text-white/70 dark:hover:bg-white/10 dark:hover:text-white"
               >
                 <LogOut size={14} />
                 退出
@@ -112,7 +137,7 @@ export function MainNav({ isLoggedIn, isAdmin, userLabel, onLogout }: MainNavPro
                 variant="ghost"
                 size="sm"
                 onClick={() => navigate('/register')}
-                className="hidden sm:inline-flex gap-1.5 text-gray-600"
+                className="hidden gap-1.5 text-[#6f6d67] hover:bg-white hover:text-[#171717] dark:text-white/70 dark:hover:bg-white/10 dark:hover:text-white sm:inline-flex"
               >
                 <KeyRound size={14} />
                 邀请码注册
@@ -120,7 +145,7 @@ export function MainNav({ isLoggedIn, isAdmin, userLabel, onLogout }: MainNavPro
               <Button
                 size="sm"
                 onClick={() => navigate('/login')}
-                className="gap-1.5 bg-black text-white hover:bg-black/80"
+                className="hidden gap-1.5 bg-[#161616] text-white hover:bg-black sm:inline-flex"
               >
                 <LogIn size={14} />
                 登录
@@ -146,8 +171,8 @@ export function MainNav({ isLoggedIn, isAdmin, userLabel, onLogout }: MainNavPro
             aria-label="关闭导航菜单背景"
             onClick={() => setMenuOpen(false)}
           />
-          <div className="absolute inset-y-0 right-0 flex w-[86vw] max-w-sm flex-col border-l border-gray-100 bg-white shadow-2xl">
-            <div className="flex items-center justify-between border-b border-gray-100 px-5 py-5">
+          <div className="absolute inset-y-0 right-0 flex w-[86vw] max-w-sm flex-col border-l border-[#e8e5dc] bg-[#fbfaf7] shadow-2xl">
+            <div className="flex items-center justify-between border-b border-[#e8e5dc] px-5 py-5">
               <span className="text-lg" style={{ fontFamily: "'Ma Shan Zheng', serif" }}>拾光筑梦</span>
               <Button variant="ghost" size="icon" onClick={() => setMenuOpen(false)} aria-label="关闭导航菜单">
                 <X size={18} />
@@ -162,9 +187,9 @@ export function MainNav({ isLoggedIn, isAdmin, userLabel, onLogout }: MainNavPro
                   onClick={() => go(item.to)}
                   className={cn(
                     'flex w-full items-center gap-2 rounded-md px-3 py-2.5 text-left text-sm transition-colors',
-                    (item.to === '/' ? location.pathname === '/' : location.pathname.startsWith(item.to))
-                      ? 'bg-black text-white'
-                      : 'text-gray-600 hover:bg-gray-50 hover:text-black'
+                    isRouteActive(item.to, location.pathname)
+                      ? 'bg-[#161616] text-white'
+                      : 'text-[#6f6d67] hover:bg-white hover:text-[#171717]'
                   )}
                 >
                   {item.icon}
@@ -173,19 +198,19 @@ export function MainNav({ isLoggedIn, isAdmin, userLabel, onLogout }: MainNavPro
               ))}
             </div>
 
-            <div className="mt-auto border-t border-gray-100 pt-4">
+            <div className="mt-auto border-t border-[#e8e5dc] pt-4">
               {isLoggedIn ? (
-                <Button variant="outline" onClick={logoutAndReturnHome} className="w-full border-gray-200">
+                <Button variant="outline" onClick={logoutAndReturnHome} className="w-full border-[#dedad0] bg-white">
                   <LogOut size={14} />
                   退出登录
                 </Button>
               ) : (
                 <div className="grid grid-cols-2 gap-2">
-                  <Button onClick={() => go('/login')} className="bg-black text-white hover:bg-black/85">
+                  <Button onClick={() => go('/login')} className="bg-[#161616] text-white hover:bg-black">
                     <LogIn size={14} />
                     登录
                   </Button>
-                  <Button variant="outline" onClick={() => go('/register')} className="border-gray-200">
+                  <Button variant="outline" onClick={() => go('/register')} className="border-[#dedad0] bg-white">
                     <KeyRound size={14} />
                     注册
                   </Button>
@@ -200,29 +225,7 @@ export function MainNav({ isLoggedIn, isAdmin, userLabel, onLogout }: MainNavPro
   );
 }
 
-function NavLink({
-  to,
-  icon,
-  label,
-  active = false,
-}: {
-  to: string;
-  icon: React.ReactNode;
-  label: string;
-  active?: boolean;
-}) {
-  return (
-    <Link
-      to={to}
-      className={cn(
-        'flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm transition-colors no-underline',
-        active
-          ? 'bg-black text-white'
-          : 'text-gray-600 hover:text-black hover:bg-gray-50'
-      )}
-    >
-      {icon}
-      {label}
-    </Link>
-  );
+function isRouteActive(path: string, currentPath: string) {
+  if (path === '/') return currentPath === '/';
+  return currentPath === path || currentPath.startsWith(`${path}/`);
 }

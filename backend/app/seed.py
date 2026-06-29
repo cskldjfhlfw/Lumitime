@@ -90,6 +90,7 @@ def seed_data(db: Session) -> None:
         )
 
     _seed_or_update_services(db, admin.id)
+    db.commit()
 
     if db.scalar(select(ServiceRequest).limit(1)) is None:
         _seed_records(db, member.id)
@@ -232,16 +233,84 @@ def _seed_content(db: Session, admin_id: str) -> None:
 
 def _seed_or_update_services(db: Session, admin_id: str) -> None:
     log_input_schema = [
-        {"name": "student_account", "label": "学生学习 App 账号", "type": "text", "required": True},
-        {"name": "student_password", "label": "学生学习 App 密码", "type": "password", "required": True},
-        {"name": "target_date", "label": "提交日期", "type": "date", "required": True},
+        {
+            "name": "student_account",
+            "label": "教务账号",
+            "type": "text",
+            "required": True,
+            "placeholder": "仅用于本次本地验收请求",
+        },
+        {
+            "name": "student_password",
+            "label": "教务密码",
+            "type": "password",
+            "required": True,
+            "placeholder": "不会入库，不会写入日志",
+        },
+        {
+            "name": "display_name",
+            "label": "姓名",
+            "type": "text",
+            "required": True,
+            "placeholder": "按模板填写，后端只保存是否已填写",
+        },
+        {"name": "target_date", "label": "提交日期（可多选）", "type": "date", "required": True},
+        {
+            "name": "sxrz_text",
+            "label": "实习日志正文",
+            "type": "textarea",
+            "required": False,
+            "placeholder": "可手写正文；留空时按本地模板库模拟生成",
+        },
+        {
+            "name": "station_activity_text",
+            "label": "今日记事",
+            "type": "textarea",
+            "required": False,
+            "placeholder": "填写后配合 DeepSeek API Key 自动生成正文",
+        },
+        {
+            "name": "deepseek_api_key",
+            "label": "DeepSeek API Key",
+            "type": "password",
+            "required": False,
+            "placeholder": "仅保存在本地浏览器，仅用于本次生成",
+        },
+        {
+            "name": "deepseek_base_url",
+            "label": "DeepSeek Base URL",
+            "type": "text",
+            "required": False,
+            "placeholder": "https://api.deepseek.com",
+        },
+        {
+            "name": "deepseek_model",
+            "label": "DeepSeek 模型",
+            "type": "text",
+            "required": False,
+            "placeholder": "deepseek-v4-flash",
+        },
+        {
+            "name": "pacing_total_sec",
+            "label": "多日总等待秒数",
+            "type": "number",
+            "required": False,
+            "placeholder": "0",
+        },
+        {
+            "name": "request_spacing_sec",
+            "label": "请求间隔秒数",
+            "type": "number",
+            "required": False,
+            "placeholder": "0",
+        },
     ]
     service_specs = [
         {
             "id": "service_log_auto_submit",
             "name": "日志自动提交",
-            "summary": "自动提交学校实习日志。",
-            "description": "输入学生学习 App 账号密码后，系统会调用后台脚本进行提交。",
+            "summary": "按日志填报模板调用真实提交脚本。",
+            "description": "输入模板所需字段后，后端调用 submit_example 链路执行真实提交；请确认账号和日期后再提交。",
             "status": "enabled" if settings.inline_worker_enabled else "disabled",
             "script_key": "log_auto_submit",
             "script_version": "v0.1.0-mock",

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hmac
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Request
@@ -13,6 +14,20 @@ from .db_lifecycle import initialize_database_for_runtime
 from .routes import admin, auth, content, public, workstation
 from .runner import reconcile_pending_requests_after_startup
 from .seed import seed_runtime_data
+
+
+CSRF_SAFE_METHODS = {"GET", "HEAD", "OPTIONS"}
+CSRF_EXEMPT_PATHS = {
+    f"{settings.api_prefix}/auth/bootstrap-admin",
+    f"{settings.api_prefix}/auth/login",
+    f"{settings.api_prefix}/auth/register-with-invite",
+    f"{settings.api_prefix}/health",
+    "/health",
+}
+
+
+def _csrf_tokens_match(csrf_cookie: str, csrf_header: str) -> bool:
+    return hmac.compare_digest(csrf_cookie.encode("utf-8"), csrf_header.encode("utf-8"))
 
 
 @asynccontextmanager
@@ -41,6 +56,20 @@ async def request_id_middleware(request: Request, call_next):
     response = await call_next(request)
     response.headers["x-request-id"] = request.state.request_id
     return response
+
+
+@app.middleware("http")
+async def csrf_middleware(request: Request, call_next):
+    if (
+        request.method.upper() not in CSRF_SAFE_METHODS
+        and request.url.path not in CSRF_EXEMPT_PATHS
+        and request.cookies.get(settings.session_cookie_name)
+    ):
+        csrf_cookie = request.cookies.get(settings.csrf_cookie_name)
+        csrf_header = request.headers.get("x-csrf-token")
+        if not csrf_cookie or not csrf_header or not _csrf_tokens_match(csrf_cookie, csrf_header):
+            return error_response(request, "FORBIDDEN", "CSRF 校验失败。", 403)
+    return await call_next(request)
 
 
 @app.exception_handler(ApiError)

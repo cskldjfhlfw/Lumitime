@@ -1,6 +1,8 @@
 import { HashRouter, Routes, Route, Navigate, useLocation } from 'react-router';
 import { Toaster } from '../shared/ui/sonner';
 import { AuthProvider, useAuth } from './providers/AuthProvider';
+import { NightModeProvider } from './providers/NightModeProvider';
+import { SiteSettingsProvider, useSiteSettings } from './providers/SiteSettingsProvider';
 
 import { LoginPage } from '../pages/LoginPage';
 import { RegisterPage } from '../pages/RegisterPage';
@@ -14,6 +16,8 @@ import { NotesPage } from '../pages/NotesPage';
 import { ContentPage } from '../pages/ContentPage';
 import { ContentDetailPage } from '../pages/ContentDetailPage';
 import { ProfilePage } from '../pages/ProfilePage';
+import ClickSpark from '../shared/components/ClickSpark';
+import Ribbons from '../shared/components/Ribbons';
 
 function ProtectedRoute({ children, adminOnly = false }: { children: React.ReactNode; adminOnly?: boolean }) {
   const { isLoggedIn, isAdmin, isAuthReady } = useAuth();
@@ -24,11 +28,18 @@ function ProtectedRoute({ children, adminOnly = false }: { children: React.React
   return <>{children}</>;
 }
 
+function HomeRoute() {
+  const { isLoggedIn, isAuthReady } = useAuth();
+  if (!isAuthReady) return <div className="min-h-screen bg-[#f8f8f7]" />;
+  if (isLoggedIn) return <Navigate to="/dashboard" replace />;
+  return <HomePage />;
+}
+
 function AppRoutes() {
   return (
     <HashRouter>
       <Routes>
-        <Route path="/" element={<HomePage />} />
+        <Route path="/" element={<HomeRoute />} />
         <Route path="/home" element={<Navigate to="/" replace />} />
         <Route path="/login" element={<LoginPage />} />
         <Route path="/register" element={<RegisterPage />} />
@@ -146,10 +157,42 @@ function AppRoutes() {
   );
 }
 
+function OptionalCursorTrail() {
+  const { settings } = useSiteSettings();
+  const cursorTrailEnabled = settings.cursorTrail;
+  return (
+    <>
+      {cursorTrailEnabled && (
+        <Ribbons
+          baseThickness={4.5}
+          colors={['#9ec5e6', '#f4c95d', '#ffffff']}
+          speedMultiplier={0.72}
+          maxAge={420}
+          enableFade
+          enableShaderEffect={false}
+        />
+      )}
+    </>
+  );
+}
+
 export default function App() {
   return (
     <AuthProvider>
-      <AppRoutes />
+      <NightModeProvider>
+        <SiteSettingsProvider>
+          <ClickSpark
+            sparkColor="var(--lumitime-spark)"
+            sparkSize={10}
+            sparkRadius={18}
+            sparkCount={8}
+            duration={400}
+          >
+            <OptionalCursorTrail />
+            <AppRoutes />
+          </ClickSpark>
+        </SiteSettingsProvider>
+      </NightModeProvider>
     </AuthProvider>
   );
 }

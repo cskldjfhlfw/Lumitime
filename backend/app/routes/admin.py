@@ -8,6 +8,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from ..audit import write_audit
+from ..config import settings
 from ..core import (
     ApiError,
     created,
@@ -22,7 +23,7 @@ from ..core import (
     prefixed_id,
 )
 from ..database import get_db
-from ..deps import require_admin
+from ..deps import delete_user_sessions, require_admin
 from ..metrics import current_dashboard_totals
 from ..models import (
     AuditLog,
@@ -61,6 +62,23 @@ from ..serializers import (
 from ..storage import store_attachment_bytes
 
 router = APIRouter(prefix="/admin", tags=["admin"])
+UPLOAD_CHUNK_SIZE = 1024 * 1024
+
+
+def _read_upload_with_limit(file: UploadFile) -> bytes:
+    chunks: list[bytes] = []
+    total = 0
+    while True:
+        chunk = file.file.read(UPLOAD_CHUNK_SIZE)
+        if not chunk:
+            break
+        total += len(chunk)
+        if total > settings.max_upload_bytes:
+            raise ApiError("PAYLOAD_TOO_LARGE", "附件大小超过上传限制。")
+        chunks.append(chunk)
+    if total == 0:
+        raise ApiError("BAD_REQUEST", "附件不能为空。")
+    return b"".join(chunks)
 
 
 @router.post("/invite-codes")
@@ -188,6 +206,7 @@ def reset_password(user_id: str, body: ResetPasswordBody, request: Request, db: 
     if user is None:
         raise ApiError("NOT_FOUND", "用户不存在。")
     user.password_hash = hash_password(body.new_password)
+    delete_user_sessions(db, user.id)
     write_audit(db, request=request, actor=admin, action="reset_user_password", resource_type="user", resource_id=user.id)
     db.commit()
     return make_response(None, message="密码已重置。", request=request)
@@ -286,14 +305,14 @@ def upload_attachment(
     work = db.get(ContentItem, work_id)
     if work is None or work.type != "work" or work.deleted_at is not None:
         raise ApiError("NOT_FOUND", "作品不存在。")
-    content = file.file.read()
+    content = _read_upload_with_limit(file)
     attachment_id = prefixed_id("att")
     attachment_filename = filename or file.filename or "attachment.bin"
-    storage_key, file_size, checksum = store_attachment_bytes(attachment_id, attachment_filename, content)
+    storage_key, stored_filename, file_size, checksum = store_attachment_bytes(attachment_id, attachment_filename, content)
     attachment = ContentAttachment(
         id=attachment_id,
         content_id=work.id,
-        filename=attachment_filename,
+        filename=stored_filename,
         file_type=file.content_type,
         file_size=file_size,
         storage_key=storage_key,

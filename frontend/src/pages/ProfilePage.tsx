@@ -1,18 +1,21 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router';
 import { motion } from 'motion/react';
-import { ArrowLeft, KeyRound, Loader2, ShieldCheck, UserCircle } from 'lucide-react';
+import { ArrowLeft, KeyRound, Loader2, MousePointer2, ShieldCheck, UserCircle } from 'lucide-react';
 import { toast } from 'sonner';
 import { MainNav } from '../layouts/MainNav';
 import { Button } from '../shared/ui/button';
 import { Input } from '../shared/ui/input';
+import { Switch } from '../shared/ui/switch';
 import type { SubmitRecord } from '../mocks/mockRecords';
 import { useAuth } from '../app/providers/AuthProvider';
+import { useSiteSettings } from '../app/providers/SiteSettingsProvider';
 import { ApiClientError, changePasswordApi, mapBackendRequest, myServiceRequestsApi } from '../shared/api/lumitimeApi';
 
 export function ProfilePage() {
   const navigate = useNavigate();
   const { isLoggedIn, isAdmin, logout, user } = useAuth();
+  const { settings, setCursorTrail } = useSiteSettings();
   const [oldPassword, setOldPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
@@ -48,10 +51,10 @@ export function ProfilePage() {
   };
 
   return (
-    <div className="min-h-screen bg-[#f8f8f7]">
+    <div className="min-h-screen overflow-x-hidden bg-[#f8f8f7]">
       <MainNav isLoggedIn={isLoggedIn} isAdmin={isAdmin} userLabel={user?.displayName} onLogout={logout} />
 
-      <main className="mx-auto w-full max-w-5xl px-6 py-10">
+      <main className="mx-auto w-full max-w-5xl overflow-hidden px-6 py-10">
         <button
           onClick={() => navigate('/')}
           className="mb-8 flex items-center gap-1.5 text-xs text-gray-400 transition-colors hover:text-gray-700"
@@ -64,9 +67,9 @@ export function ProfilePage() {
           initial={{ opacity: 0, y: 16 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.45 }}
-          className="grid gap-5 lg:grid-cols-[320px_1fr]"
+          className="grid min-w-0 gap-5 lg:grid-cols-[320px_minmax(0,1fr)]"
         >
-          <section className="rounded-lg border border-gray-100 bg-white p-5">
+          <section className="min-w-0 rounded-lg border border-gray-100 bg-white p-5">
             <div className="mb-6 flex h-12 w-12 items-center justify-center rounded-lg bg-black text-white">
               <UserCircle size={22} />
             </div>
@@ -79,8 +82,8 @@ export function ProfilePage() {
             </div>
           </section>
 
-          <section className="space-y-5">
-            <div className="rounded-lg border border-gray-100 bg-white p-5">
+          <section className="min-w-0 space-y-5">
+            <div className="min-w-0 rounded-lg border border-gray-100 bg-white p-5">
               <div className="mb-4 flex items-center gap-2">
                 <KeyRound size={16} className="text-gray-500" />
                 <h2 className="text-sm font-medium text-gray-900">修改 Lumitime 站点密码</h2>
@@ -99,12 +102,32 @@ export function ProfilePage() {
               </div>
             </div>
 
-            <div className="rounded-lg border border-gray-100 bg-white p-5">
+            <div className="min-w-0 rounded-lg border border-gray-100 bg-white p-5">
+              <div className="mb-4 flex items-center gap-2">
+                <MousePointer2 size={16} className="text-gray-500" />
+                <h2 className="text-sm font-medium text-gray-900">个人设置</h2>
+              </div>
+              <div className="flex min-w-0 items-center justify-between gap-4 rounded-md border border-gray-100 bg-[#fbfaf7] px-4 py-3">
+                <div className="min-w-0">
+                  <p className="text-sm font-medium text-gray-800">光标拖尾</p>
+                  <p className="mt-1 max-w-full text-xs leading-5 text-gray-400">
+                    默认关闭。开启后会显示鼠标移动轨迹，低性能设备可能出现卡顿。
+                  </p>
+                </div>
+                <Switch
+                  checked={settings.cursorTrail}
+                  onCheckedChange={setCursorTrail}
+                  aria-label="开启光标拖尾"
+                />
+              </div>
+            </div>
+
+            <div className="min-w-0 rounded-lg border border-gray-100 bg-white p-5">
               <div className="mb-4 flex items-center gap-2">
                 <ShieldCheck size={16} className="text-gray-500" />
                 <h2 className="text-sm font-medium text-gray-900">最近服务提交</h2>
               </div>
-              <div className="divide-y divide-gray-50">
+              <div className="min-w-0 max-w-full divide-y divide-gray-50 overflow-hidden">
                 {recordsLoading && (
                   <div className="flex items-center gap-2 py-6 text-sm text-gray-400">
                     <Loader2 size={14} className="animate-spin" />
@@ -115,10 +138,10 @@ export function ProfilePage() {
                   <div className="py-6 text-sm text-gray-400">暂无真实提交记录</div>
                 )}
                 {!recordsLoading && records.map(record => (
-                  <div key={record.id} className="flex items-center gap-3 py-3">
+                  <div key={record.id} className="grid min-w-0 max-w-full gap-2 py-3 text-sm sm:grid-cols-[5.5rem_minmax(0,1fr)_minmax(8rem,12rem)] sm:items-start">
                     <span className="text-xs text-gray-400">{record.submittedAt.split(' ')[0]}</span>
-                    <span className="flex-1 truncate text-sm text-gray-700">{record.resultSummary}</span>
-                    <span className="font-mono text-xs text-gray-400">{record.serviceRequestId}</span>
+                    <span className="min-w-0 max-w-full break-words text-gray-700">{record.resultSummary}</span>
+                    <span className="min-w-0 max-w-full break-all font-mono text-xs text-gray-400 sm:text-right">{record.serviceRequestId}</span>
                   </div>
                 ))}
               </div>

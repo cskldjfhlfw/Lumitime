@@ -57,7 +57,7 @@ def generate_internship_log_via_deepseek(
     activity: str,
     api_key: str,
     base_url: str = "https://api.deepseek.com",
-    model: str = "deepseek-chat",
+    model: str = "deepseek-v4-flash",
     timeout_sec: int = 90,
     internship_start: date | None = None,
     log_dates: list[date] | None = None,
@@ -101,7 +101,7 @@ def generate_internship_log_via_deepseek(
         "以句号自然结束，勿附字数统计或后记。"
     )
     payload: dict[str, Any] = {
-        "model": model.strip() or "deepseek-chat",
+        "model": model.strip() or "deepseek-v4-flash",
         "messages": [
             {"role": "system", "content": SYSTEM_PROMPT},
             {"role": "user", "content": user_msg},

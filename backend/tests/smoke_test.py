@@ -5,6 +5,12 @@ from fastapi.testclient import TestClient
 from backend.app.main import app
 
 
+def _csrf_headers(client: TestClient) -> dict[str, str]:
+    token = client.cookies.get("lumitime_csrf")
+    assert token
+    return {"x-csrf-token": token}
+
+
 def test_core_contract_and_privacy() -> None:
     with TestClient(app) as client:
         assert client.get("/api/v1/dashboard/metrics").status_code == 200
@@ -23,6 +29,7 @@ def test_core_contract_and_privacy() -> None:
 
         create = client.post(
             "/api/v1/workstation/services/service_log_auto_submit/requests",
+            headers=_csrf_headers(client),
             json={
                 "student_account": "fail-user@example.com",
                 "student_password": "pw-secret",
@@ -41,10 +48,11 @@ def test_core_contract_and_privacy() -> None:
         retry = client.post(
             f"/api/v1/workstation/service-requests/{service_request_id}/retry",
             json={"student_account": "202312348912", "student_password": "retry-secret"},
+            headers=_csrf_headers(client),
         )
         assert retry.status_code == 201
 
-        client.post("/api/v1/auth/logout")
+        client.post("/api/v1/auth/logout", headers=_csrf_headers(client))
         admin_login = client.post("/api/v1/auth/login", json={"username": "admin", "password": "admin"})
         assert admin_login.status_code == 200
 

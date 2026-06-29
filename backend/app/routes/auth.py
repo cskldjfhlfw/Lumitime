@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import hmac
 from collections import defaultdict, deque
-from datetime import timedelta
 from time import monotonic
 
 from fastapi import APIRouter, Depends, Request, Response
@@ -13,7 +12,7 @@ from ..audit import write_audit
 from ..config import settings
 from ..core import ApiError, created, hash_password, make_response, now_utc, password_needs_rehash, prefixed_id, request_meta, verify_password
 from ..database import get_db
-from ..deps import clear_session_cookie, create_session, require_auth
+from ..deps import clear_session_cookie, create_session, delete_user_sessions, require_auth
 from ..models import InviteCode, InviteCodeUsage, SessionRecord, User
 from ..schemas import BootstrapAdminBody, ChangePasswordBody, LoginBody, RegisterWithInviteBody
 from ..serializers import user_public
@@ -116,7 +115,7 @@ def login(body: LoginBody, request: Request, response: Response, db: Session = D
 
 @router.post("/logout")
 def logout(request: Request, response: Response, db: Session = Depends(get_db)):
-    token = request.cookies.get("lumitime_session")
+    token = request.cookies.get(settings.session_cookie_name)
     if token:
         from ..core import secure_hash
 
@@ -171,11 +170,12 @@ def register_with_invite(body: RegisterWithInviteBody, request: Request, db: Ses
 
 
 @router.patch("/password")
-def change_password(body: ChangePasswordBody, request: Request, db: Session = Depends(get_db), user: User = Depends(require_auth)):
+def change_password(body: ChangePasswordBody, request: Request, response: Response, db: Session = Depends(get_db), user: User = Depends(require_auth)):
     if not verify_password(body.old_password, user.password_hash):
         raise ApiError("BAD_REQUEST", "旧密码不正确。")
     user.password_hash = hash_password(body.new_password)
-    db.execute(delete(SessionRecord).where(SessionRecord.user_id == user.id, SessionRecord.expires_at < now_utc() + timedelta(seconds=1)))
+    delete_user_sessions(db, user.id)
+    create_session(db, response, user)
     write_audit(db, request=request, actor=user, action="change_password", resource_type="user", resource_id=user.id)
     db.commit()
     return make_response(None, message="密码已更新。", request=request)

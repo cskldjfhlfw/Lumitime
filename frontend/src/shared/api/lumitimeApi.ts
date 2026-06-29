@@ -2,6 +2,7 @@ import type { FailureCode, RecordStatus, SubmitRecord } from '../../mocks/mockRe
 import type { Service } from '../../mocks/mockServices';
 
 const API_BASE = '/api/v1';
+const CSRF_COOKIE_NAME = 'lumitime_csrf';
 
 export interface ApiEnvelope<T> {
   code: string;
@@ -28,11 +29,14 @@ async function apiFetch<T>(path: string, init: RequestInit = {}) {
   let response: Response;
   try {
     const isFormData = init.body instanceof FormData;
+    const method = (init.method || 'GET').toUpperCase();
+    const csrfToken = shouldAttachCsrf(method) ? readCookie(CSRF_COOKIE_NAME) : null;
     response = await fetch(`${API_BASE}${path}`, {
       credentials: 'include',
       ...init,
       headers: {
         ...(init.body && !isFormData ? { 'Content-Type': 'application/json' } : {}),
+        ...(csrfToken ? { 'X-CSRF-Token': csrfToken } : {}),
         ...init.headers,
       },
     });
@@ -52,6 +56,19 @@ async function apiFetch<T>(path: string, init: RequestInit = {}) {
   }
 
   return payload as ApiEnvelope<T>;
+}
+
+function shouldAttachCsrf(method: string) {
+  return method !== 'GET' && method !== 'HEAD' && method !== 'OPTIONS';
+}
+
+function readCookie(name: string) {
+  const prefix = `${encodeURIComponent(name)}=`;
+  return document.cookie
+    .split(';')
+    .map(part => part.trim())
+    .find(part => part.startsWith(prefix))
+    ?.slice(prefix.length) || null;
 }
 
 export interface BackendUser {
@@ -226,8 +243,8 @@ export interface BackendService {
   input_schema?: Array<{ name: string; label: string; type: string; required?: boolean; placeholder?: string }>;
 }
 
-export function listServicesApi() {
-  return apiFetch<{ items: BackendService[] }>('/workstation/services');
+export function listServicesApi(query: { page?: number; page_size?: number } = {}) {
+  return apiFetch<Paginated<BackendService>>(`/workstation/services${queryString(query)}`);
 }
 
 export function serviceDetailApi(serviceId: string) {
@@ -275,12 +292,13 @@ export function serviceRequestDetailApi(serviceRequestId: string) {
 export function myServiceRequestsApi(query: {
   service_id?: string;
   status?: string;
+  service_request_id?: string;
   start_date?: string;
   end_date?: string;
   page?: number;
   page_size?: number;
 } = {}) {
-  return apiFetch<{ items: BackendServiceRequest[]; page: number; page_size: number; total: number }>(
+  return apiFetch<Paginated<BackendServiceRequest>>(
     `/workstation/service-requests/my${queryString(query)}`,
   );
 }

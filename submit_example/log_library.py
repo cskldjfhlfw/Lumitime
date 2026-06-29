@@ -1,5 +1,5 @@
 """
-从项目根目录 data/日志库.txt 随机抽取一条实习日志正文。
+从项目根目录 backend/resources/logs_text.txt 随机抽取一条实习日志正文。
 行首形如「1. 」「12. 」的前缀会被去掉，仅保留正文。
 """
 
@@ -10,8 +10,8 @@ import re
 import time
 from pathlib import Path
 
-_REPO = Path(__file__).resolve().parents[2]
-LOG_LIBRARY_PATH = _REPO / "data" / "日志库.txt"
+_REPO = Path(__file__).resolve().parents[1]
+LOG_LIBRARY_PATH = _REPO / "backend" / "resources" / "logs_text.txt"
 
 _LINE_PREFIX = re.compile(r"^\s*\d+\.\s*")
 

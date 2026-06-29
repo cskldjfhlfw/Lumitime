@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import secrets
 from datetime import timedelta
 
 from fastapi import Depends, Request, Response
@@ -13,6 +14,7 @@ from .models import SessionRecord, User
 
 
 SESSION_TTL = timedelta(days=7)
+CSRF_TTL_SECONDS = int(SESSION_TTL.total_seconds())
 
 
 def purge_expired_sessions(db: Session) -> None:
@@ -22,6 +24,7 @@ def purge_expired_sessions(db: Session) -> None:
 def create_session(db: Session, response: Response, user: User) -> str:
     purge_expired_sessions(db)
     token = prefixed_id("sess") + "." + prefixed_id("token")
+    csrf_token = secrets.token_urlsafe(32)
     record = SessionRecord(
         id=prefixed_id("session"),
         token_hash=secure_hash(token),
@@ -39,11 +42,25 @@ def create_session(db: Session, response: Response, user: User) -> str:
         max_age=int(SESSION_TTL.total_seconds()),
         path="/",
     )
+    response.set_cookie(
+        settings.csrf_cookie_name,
+        csrf_token,
+        httponly=False,
+        secure=settings.cookie_secure,
+        samesite="lax",
+        max_age=CSRF_TTL_SECONDS,
+        path="/",
+    )
     return token
 
 
 def clear_session_cookie(response: Response) -> None:
-    response.delete_cookie(settings.session_cookie_name, path="/")
+    response.delete_cookie(settings.session_cookie_name, path="/", secure=settings.cookie_secure, samesite="lax")
+    response.delete_cookie(settings.csrf_cookie_name, path="/", secure=settings.cookie_secure, samesite="lax")
+
+
+def delete_user_sessions(db: Session, user_id: str) -> None:
+    db.execute(delete(SessionRecord).where(SessionRecord.user_id == user_id))
 
 
 def get_current_user_optional(request: Request, db: Session = Depends(get_db)) -> User | None:

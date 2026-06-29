@@ -31,6 +31,13 @@
   --chart-4: oklch(0.828 0.189 84.429);
   --chart-5: oklch(0.769 0.188 70.08);
   --radius: 0.625rem;
+  --lumitime-bg: #f8f7f3;
+  --lumitime-surface: #fbfaf7;
+  --lumitime-ink: #171717;
+  --lumitime-spark: #f4c95d;
+  --lumitime-ribbon: #9ec5e6;
+  --lumitime-ribbon-warm: #f4c95d;
+  --lumitime-ray: #fff7dc;
   --sidebar: oklch(0.985 0 0);
   --sidebar-foreground: oklch(0.145 0 0);
   --sidebar-primary: #030213;
@@ -68,6 +75,13 @@
   --chart-3: oklch(0.769 0.188 70.08);
   --chart-4: oklch(0.627 0.265 303.9);
   --chart-5: oklch(0.645 0.246 16.439);
+  --lumitime-bg: #151515;
+  --lumitime-surface: #1d1d1c;
+  --lumitime-ink: #f5f2ea;
+  --lumitime-spark: #ffe7a3;
+  --lumitime-ribbon: #8fb6d9;
+  --lumitime-ribbon-warm: #f4c95d;
+  --lumitime-ray: #dbeafe;
   --sidebar: oklch(0.205 0 0);
   --sidebar-foreground: oklch(0.985 0 0);
   --sidebar-primary: oklch(0.488 0.243 264.376);
@@ -135,6 +149,16 @@
 
   html {
     font-size: var(--font-size);
+    overflow-x: hidden;
+  }
+
+  body {
+    overflow-x: hidden;
+  }
+
+  #root {
+    min-width: 0;
+    overflow-x: hidden;
   }
 
   h1 {
@@ -177,5 +201,306 @@
     font-size: var(--text-base);
     font-weight: var(--font-weight-normal);
     line-height: 1.5;
+  }
+}
+
+@layer components {
+  .lumitime-script-logo {
+    font-weight: 600;
+    letter-spacing: 0;
+    transform: translateY(1px) rotate(-1deg);
+    text-shadow: 0 10px 24px rgb(20 20 20 / 0.10);
+  }
+
+  .dark .lumitime-script-logo {
+    text-shadow: 0 10px 26px rgb(0 0 0 / 0.36);
+  }
+
+  .animated-list--gradients::before,
+  .animated-list--gradients::after {
+    content: '';
+    position: sticky;
+    left: 0;
+    right: 0;
+    z-index: 2;
+    display: block;
+    height: 1px;
+    pointer-events: none;
+  }
+
+  .animated-list--gradients::before {
+    top: 4rem;
+    box-shadow: 0 14px 28px 22px rgb(248 248 247 / 0.64);
+  }
+
+  .animated-list--gradients::after {
+    bottom: 0;
+    box-shadow: 0 -14px 28px 22px rgb(248 248 247 / 0.50);
+  }
+
+  .dark .animated-list--gradients::before {
+    box-shadow: 0 14px 28px 22px rgb(17 17 17 / 0.66);
+  }
+
+  .dark .animated-list--gradients::after {
+    box-shadow: 0 -14px 28px 22px rgb(17 17 17 / 0.54);
+  }
+
+  .animated-list__item {
+    min-width: 0;
+  }
+
+  .animated-list__item--active > * {
+    outline: 1.5px solid rgb(23 23 23 / 0.16);
+    outline-offset: 2px;
+  }
+
+  .pill-nav {
+    display: inline-flex;
+    min-width: 0;
+    max-width: 100%;
+    align-items: center;
+    gap: 0.4rem;
+    overflow: hidden;
+    border: 1px solid rgb(232 229 220 / 0.9);
+    border-radius: 999px;
+    background: rgb(255 255 255 / 0.72);
+    padding: 0.28rem;
+    color: var(--pill-nav-base);
+    box-shadow: 0 18px 46px rgb(24 22 18 / 0.09);
+    backdrop-filter: blur(20px);
+  }
+
+  .pill-nav--dark {
+    border-color: rgb(255 255 255 / 0.12);
+    background: rgb(28 28 27 / 0.72);
+    box-shadow: 0 18px 46px rgb(0 0 0 / 0.26);
+  }
+
+  .pill-nav__brand {
+    display: inline-flex;
+    min-width: 7.8rem;
+    flex: 0 0 auto;
+    align-items: center;
+    justify-content: center;
+    padding: 0 0.8rem 0 1.05rem;
+  }
+
+  .pill-nav__logo {
+    display: block;
+    height: 1.65rem;
+    width: auto;
+  }
+
+  .pill-nav__items {
+    display: inline-flex;
+    min-width: 0;
+    align-items: center;
+    gap: 0.18rem;
+    overflow: hidden;
+  }
+
+  .pill-nav__item {
+    display: inline-flex;
+    min-width: 0;
+    height: 2.25rem;
+    flex: 0 0 auto;
+    align-items: center;
+    justify-content: center;
+    gap: 0.36rem;
+    border-radius: 999px;
+    padding: 0 0.82rem;
+    color: var(--pill-nav-base);
+    font-size: 0.9rem;
+    line-height: 1;
+    white-space: nowrap;
+    text-decoration: none;
+    transition: color 0.24s var(--pill-nav-ease), background-color 0.24s var(--pill-nav-ease), box-shadow 0.24s var(--pill-nav-ease), transform 0.24s var(--pill-nav-ease);
+  }
+
+  .pill-nav__item:hover {
+    transform: translateY(-1px);
+    background: color-mix(in srgb, var(--pill-nav-active) 88%, transparent);
+    color: var(--pill-nav-hover-text);
+    box-shadow: 0 10px 24px rgb(22 22 22 / 0.12);
+  }
+
+  .pill-nav__item--active,
+  .pill-nav__item--active:hover {
+    background: var(--pill-nav-active);
+    color: var(--pill-nav-active-text);
+    box-shadow: 0 12px 24px rgb(12 12 12 / 0.18);
+  }
+
+  .pill-nav__icon {
+    display: inline-flex;
+    flex: 0 0 auto;
+  }
+
+  .light-rays {
+    mix-blend-mode: screen;
+  }
+
+  .dark .light-rays {
+    opacity: 0.52;
+  }
+
+  .ribbons-canvas {
+    opacity: 0.72;
+    mix-blend-mode: multiply;
+  }
+
+  .dark .ribbons-canvas {
+    opacity: 0.62;
+    mix-blend-mode: screen;
+  }
+
+  .night-mode-toggle {
+    position: relative;
+    display: inline-flex;
+    width: 3.25rem;
+    height: 1.75rem;
+    flex: 0 0 auto;
+    overflow: hidden;
+    border: 1px solid rgb(214 209 198 / 0.95);
+    border-radius: 999px;
+    background: #8eb8dc;
+    box-shadow: inset 0 4px 10px rgb(255 255 255 / 0.28), inset 0 -8px 16px rgb(39 83 128 / 0.25), 0 10px 24px rgb(20 20 20 / 0.12);
+    transition: background 0.35s ease, border-color 0.35s ease, box-shadow 0.35s ease;
+  }
+
+  .night-mode-toggle__sky {
+    position: absolute;
+    inset: 0;
+    overflow: hidden;
+    border-radius: inherit;
+  }
+
+  .night-mode-toggle__sky::before,
+  .night-mode-toggle__sky::after {
+    content: '';
+    position: absolute;
+    inset-block: 0;
+    width: 1.75rem;
+    background: rgb(255 255 255 / 0.14);
+    transform: skewX(-14deg);
+    transition: opacity 0.35s ease;
+  }
+
+  .night-mode-toggle__sky::before {
+    left: 0.82rem;
+  }
+
+  .night-mode-toggle__sky::after {
+    left: 1.92rem;
+  }
+
+  .night-mode-toggle__orb {
+    position: absolute;
+    left: 0.2rem;
+    top: 0.2rem;
+    width: 1.35rem;
+    height: 1.35rem;
+    border-radius: 999px;
+    background: radial-gradient(circle at 48% 45%, #ff9714 0 34%, #ffd23a 36% 72%, #ffc222 73%);
+    box-shadow: 0 5px 10px rgb(124 86 12 / 0.35);
+    transition: left 0.35s cubic-bezier(0.2, 0.8, 0.2, 1), background 0.35s ease, box-shadow 0.35s ease;
+    z-index: 3;
+  }
+
+  .night-mode-toggle__cloud {
+    position: absolute;
+    right: -0.12rem;
+    bottom: -0.2rem;
+    height: 0.82rem;
+    border-radius: 999px;
+    background: white;
+    transition: opacity 0.25s ease, transform 0.35s ease;
+    z-index: 2;
+  }
+
+  .night-mode-toggle__cloud--a {
+    width: 2.3rem;
+  }
+
+  .night-mode-toggle__cloud--b {
+    right: 0.62rem;
+    bottom: -0.05rem;
+    width: 1.2rem;
+    height: 1.15rem;
+  }
+
+  .night-mode-toggle__star {
+    position: absolute;
+    width: 0.22rem;
+    height: 0.22rem;
+    opacity: 0;
+    transform: scale(0.4);
+    color: white;
+    transition: opacity 0.25s ease, transform 0.35s ease;
+    z-index: 2;
+  }
+
+  .night-mode-toggle__star::before,
+  .night-mode-toggle__star::after {
+    content: '';
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    border-radius: 999px;
+    background: currentColor;
+    transform: translate(-50%, -50%);
+  }
+
+  .night-mode-toggle__star::before {
+    width: 100%;
+    height: 0.08rem;
+  }
+
+  .night-mode-toggle__star::after {
+    width: 0.08rem;
+    height: 100%;
+  }
+
+  .night-mode-toggle__star--a {
+    left: 0.58rem;
+    top: 0.48rem;
+  }
+
+  .night-mode-toggle__star--b {
+    left: 1.28rem;
+    top: 0.28rem;
+  }
+
+  .night-mode-toggle__star--c {
+    left: 1.72rem;
+    top: 0.82rem;
+  }
+
+  .night-mode-toggle--active {
+    border-color: rgb(20 20 24 / 0.6);
+    background: #171923;
+    box-shadow: inset 0 4px 10px rgb(255 255 255 / 0.08), inset 0 -8px 16px rgb(0 0 0 / 0.36), 0 10px 24px rgb(20 20 20 / 0.18);
+  }
+
+  .night-mode-toggle--active .night-mode-toggle__sky::before,
+  .night-mode-toggle--active .night-mode-toggle__sky::after {
+    opacity: 0.16;
+  }
+
+  .night-mode-toggle--active .night-mode-toggle__orb {
+    left: 1.68rem;
+    background: radial-gradient(circle at 34% 36%, #d8e0ec 0 18%, transparent 19%), radial-gradient(circle at 62% 63%, #9da8ba 0 11%, transparent 12%), radial-gradient(circle at 64% 32%, #cbd5e2 0 15%, transparent 16%), #e6edf6;
+    box-shadow: 0 0 0 0.14rem rgb(255 252 210 / 0.32), 0 5px 12px rgb(0 0 0 / 0.45);
+  }
+
+  .night-mode-toggle--active .night-mode-toggle__cloud {
+    opacity: 0;
+    transform: translateX(0.75rem);
+  }
+
+  .night-mode-toggle--active .night-mode-toggle__star {
+    opacity: 1;
+    transform: scale(1) rotate(45deg);
   }
 }

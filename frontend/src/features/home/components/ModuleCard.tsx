@@ -53,35 +53,35 @@ export function ModuleCard({
         whileHover={!isActuallyLocked ? { y: -3 } : {}}
         onClick={handleClick}
         className={`
-          group relative bg-white border rounded-lg p-6 cursor-pointer
-          transition-all duration-200 select-none
+          group relative min-h-[168px] cursor-pointer select-none rounded-lg border bg-white/82 p-5
+          transition-all duration-200
           ${isActuallyLocked
-            ? 'border-gray-100 opacity-70 hover:opacity-90'
-            : 'border-gray-150 hover:border-gray-300 hover:shadow-[0_4px_24px_rgba(0,0,0,0.07)]'
+            ? 'border-[#e8e5dc] opacity-72 hover:opacity-95'
+            : 'border-[#e8e5dc] hover:-translate-y-0.5 hover:border-[#d7d2c7] hover:shadow-[0_18px_48px_rgba(20,20,20,0.07)]'
           }
         `}
       >
         {/* Lock indicator */}
         {isActuallyLocked && (
-          <div className="absolute top-4 right-4 text-gray-300">
+          <div className="absolute right-4 top-4 text-[#b8b3a8]">
             <Lock size={14} />
           </div>
         )}
 
         {/* Icon */}
         <div className={`
-          w-10 h-10 rounded-lg flex items-center justify-center mb-4
-          ${isActuallyLocked ? 'bg-gray-50 text-gray-300' : 'bg-gray-50 text-gray-700 group-hover:bg-black group-hover:text-white'}
+          mb-5 flex h-10 w-10 items-center justify-center rounded-md border
+          ${isActuallyLocked ? 'border-[#ebe7dd] bg-[#f8f7f3] text-[#b8b3a8]' : 'border-[#ebe7dd] bg-[#f8f7f3] text-[#56544f] group-hover:border-[#171717] group-hover:bg-[#171717] group-hover:text-white'}
           transition-colors duration-200
         `}>
           {icon}
         </div>
 
-        <h3 className="text-sm font-medium text-gray-900 mb-1.5">{title}</h3>
-        <p className="text-xs text-gray-500 leading-relaxed">{description}</p>
+        <h3 className="mb-2 text-sm font-medium text-[#171717]">{title}</h3>
+        <p className="text-xs leading-6 text-[#6f6d67]">{description}</p>
 
         {!isActuallyLocked && (
-          <div className="mt-4 flex items-center gap-1 text-xs text-gray-400 group-hover:text-black transition-colors">
+          <div className="mt-5 flex items-center gap-1 text-xs text-[#9b978d] transition-colors group-hover:text-[#171717]">
             <span>进入</span>
             <ArrowRight size={12} />
           </div>
@@ -102,7 +102,7 @@ export function ModuleCard({
           </DialogHeader>
           <div className="flex gap-2 mt-2">
             <Button
-              className="flex-1 bg-black text-white hover:bg-black/80"
+              className="flex-1 bg-[#161616] text-white hover:bg-black"
               onClick={() => { setDialogOpen(false); navigate('/login'); }}
             >
               <LogIn size={14} />
@@ -110,7 +110,7 @@ export function ModuleCard({
             </Button>
             <Button
               variant="outline"
-              className="flex-1"
+              className="flex-1 border-[#dedad0]"
               onClick={() => { setDialogOpen(false); navigate('/register'); }}
             >
               <KeyRound size={14} />

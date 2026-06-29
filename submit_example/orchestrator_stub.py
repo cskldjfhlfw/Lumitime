@@ -13,8 +13,8 @@ from collections.abc import Awaitable, Callable
 from datetime import date
 from typing import Any
 
-from app.jw_chain import run_jw_chain
-from app.sso_cppu import try_sso_login
+from .jw_chain import run_jw_chain
+from .sso_cppu import try_sso_login
 
 logger = logging.getLogger(__name__)
 

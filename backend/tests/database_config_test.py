@@ -9,6 +9,9 @@ def test_production_rejects_sqlite_database_url() -> None:
     env = os.environ.copy()
     env["LUMITIME_ENV"] = "production"
     env["LUMITIME_DATABASE_URL"] = "sqlite:///./should-not-start.db"
+    env["LUMITIME_SECRET_KEY"] = "x" * 32
+    env["LUMITIME_COOKIE_SECURE"] = "1"
+    env["LUMITIME_CORS_ORIGINS"] = "https://lumitime.example.com"
     result = subprocess.run(
         [sys.executable, "-c", "import backend.app.database"],
         env=env,

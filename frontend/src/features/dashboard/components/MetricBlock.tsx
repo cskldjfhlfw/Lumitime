@@ -43,38 +43,36 @@ export function MetricBlock({ metric, delay = 0 }: MetricBlockProps) {
   const trendText = first > 0 ? `${Math.round(((last - first) / first) * 100)}%` : '0%';
 
   return (
-    <div className="bg-[#111111] border border-white/5 rounded-lg p-5 flex flex-col gap-3 hover:border-white/10 transition-colors">
+    <div className="dashboard-metric-card flex flex-col gap-3 rounded-lg border border-[#e8e5dc] bg-white/86 p-5 transition-colors hover:border-[#d8d4ca] dark:border-white/10 dark:bg-white/[0.06] dark:hover:border-white/20">
       <div className="flex items-end justify-between">
         <div>
-          <p className="text-3xl font-light text-white tabular-nums">
+          <p className="text-3xl font-light tabular-nums text-[#171717] dark:text-white">
             {count.toLocaleString()}
             {metric.unit && (
-              <span className="text-base text-white/50 ml-1">{metric.unit}</span>
+              <span className="ml-1 text-base text-[#9b978d] dark:text-white/50">{metric.unit}</span>
             )}
           </p>
-          <p className="text-xs text-white/40 mt-1.5 tracking-wide">{metric.label}</p>
+          <p className="mt-1.5 text-xs tracking-wide text-[#7d786f] dark:text-white/50">{metric.label}</p>
         </div>
 
-        {/* Trend badge */}
-        <div className="text-xs text-emerald-400 bg-emerald-400/10 px-2 py-0.5 rounded-full">
+        <div className="rounded-full bg-emerald-500/10 px-2 py-0.5 text-xs text-emerald-700 dark:text-emerald-300">
           {first > 0 && last >= first ? '+' : ''}{trendText}
         </div>
       </div>
 
-      {/* Sparkline */}
       <div className="h-10">
         <ResponsiveContainer width="100%" height="100%">
           <AreaChart data={sparkData}>
             <defs>
               <linearGradient id={`grad-${metric.label}`} x1="0" y1="0" x2="0" y2="1">
-                <stop offset="5%" stopColor="rgba(255,255,255,0.3)" stopOpacity={1} />
-                <stop offset="95%" stopColor="rgba(255,255,255,0)" stopOpacity={0} />
+                <stop offset="5%" stopColor="rgba(88,83,75,0.22)" stopOpacity={1} />
+                <stop offset="95%" stopColor="rgba(88,83,75,0)" stopOpacity={0} />
               </linearGradient>
             </defs>
             <Area
               type="monotone"
               dataKey="v"
-              stroke="rgba(255,255,255,0.5)"
+              stroke="rgba(88,83,75,0.55)"
               strokeWidth={1.5}
               fill={`url(#grad-${metric.label})`}
               dot={false}
