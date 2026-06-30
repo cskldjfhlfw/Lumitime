@@ -6,12 +6,17 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 
 WORKDIR /app
 
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends nodejs \
+    && rm -rf /var/lib/apt/lists/*
+
 COPY backend/requirements.txt /app/backend/requirements.txt
 RUN python -m pip install --upgrade pip \
     && python -m pip install -r /app/backend/requirements.txt
 
 COPY alembic.ini /app/alembic.ini
 COPY backend /app/backend
+COPY submit_example /app/submit_example
 
 RUN mkdir -p /var/lib/lumitime/uploads
 

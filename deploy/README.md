@@ -10,7 +10,7 @@
 - `nginx`: 托管 React 构建产物，处理 HTTPS，并将 `/api/` 反向代理到 `api:8000`。
 - `backup`: 一次性备份任务，导出 PostgreSQL dump、uploads 压缩包和部署配置模板。
 
-当前生产部署默认启用内联日志提交执行器：`LUMITIME_ENABLE_INLINE_WORKER=1` 且 `LUMITIME_LOG_SUBMIT_MODE=dry_run`。该模式复用本地验收流程，会生成服务记录和脱敏执行日志，但不会请求真实学校系统。只有在确认外部脚本资源、目标系统网络和运维告警都就绪后，才建议把 `LUMITIME_LOG_SUBMIT_MODE` 切为 `real`。
+当前生产部署默认启用内联日志提交执行器：`LUMITIME_ENABLE_INLINE_WORKER=1` 且 `LUMITIME_LOG_SUBMIT_MODE=real_canary`。灰度模式下，管理员和 `LUMITIME_LOG_SUBMIT_CANARY_USERNAMES` 白名单用户会请求真实学校系统；其他普通用户仍执行本地干跑，只生成脱敏执行记录。紧急回退时把 `LUMITIME_LOG_SUBMIT_MODE` 改为 `dry_run` 并重启 API。
 
 ## 2. 首次部署
 
@@ -155,7 +155,9 @@ curl -fsS https://lumitime.example.com/api/v1/health
 4. 镜像推送到阿里云 ACR 公网地址。
 5. Actions 通过部署 SSH key 登录 ECS。
 6. ECS 使用 ACR 内网地址拉取 `sha-<git-sha>` 标签。
-7. ECS 更新 `deploy/.env` 中的镜像标签，执行迁移，重建 `api/nginx`，最后检查 `https://yeen666.cn/api/v1/health`。
+7. ECS 更新 `deploy/.env` 中的镜像标签和灰度提交配置。
+8. ECS 用新 API 镜像执行真实脚本资源预检，确认 Node、`submit_example`、RSA 加密脚本和 doSave 模板都存在。
+9. ECS 执行迁移，重建 `api/nginx`，最后检查 `https://yeen666.cn/api/v1/health`。
 
 需要的 GitHub Actions Secrets：
 
@@ -168,6 +170,34 @@ ALIYUN_PORT=22
 ```
 
 ACR 登录用户名已固定在 workflow 中：`aliyun1054531571`。`ALIYUN_HOST`、`ALIYUN_USER`、`ALIYUN_PORT` 有默认值，不配置也会使用当前 ECS：`root@47.93.31.206:22`。
+
+查看当前真实提交灰度配置：
+
+```bash
+grep -E '^(LUMITIME_LOG_SUBMIT_MODE|LUMITIME_LOG_SUBMIT_CANARY_USERNAMES)=' deploy/.env
+```
+
+紧急回退到干跑模式：
+
+```bash
+python3 - <<'PY'
+from pathlib import Path
+path = Path("deploy/.env")
+lines = path.read_text().splitlines()
+out = []
+seen = False
+for line in lines:
+    if line.startswith("LUMITIME_LOG_SUBMIT_MODE="):
+        out.append("LUMITIME_LOG_SUBMIT_MODE=dry_run")
+        seen = True
+    else:
+        out.append(line)
+if not seen:
+    out.append("LUMITIME_LOG_SUBMIT_MODE=dry_run")
+path.write_text("\n".join(out) + "\n")
+PY
+docker compose --env-file deploy/.env -f deploy/compose.prod.yml up -d api
+```
 
 手动更新前先备份：
 

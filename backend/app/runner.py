@@ -13,6 +13,7 @@ from .core import mask_account, now_utc, prefixed_id, sanitize_text
 from .database import SessionLocal
 from .log_submit import PreparedLogContent, prepare_log_content
 from .models import ServiceExecutionLog, ServiceRequest, WorkstationService
+from .models import User
 from .real_log_submit import RealSubmitError, run_real_log_submit
 
 
@@ -126,6 +127,19 @@ def _append_real_submit_events(db, record: ServiceRequest, student_account: str,
     db.commit()
 
 
+def _real_log_submit_allowed(service: WorkstationService | None, user: User | None) -> bool:
+    if service is None or service.script_key != LOG_AUTO_SUBMIT_SCRIPT_KEY:
+        return False
+    if settings.real_log_submit_enabled:
+        return True
+    if not settings.real_log_submit_canary_enabled or user is None:
+        return False
+    if user.role == "admin":
+        return True
+    allowed_usernames = {username.strip().lower() for username in settings.log_submit_canary_usernames}
+    return user.username.strip().lower() in allowed_usernames
+
+
 def _mark_missing_credentials(service_request_public_id: str) -> None:
     finished = now_utc()
     db = SessionLocal()
@@ -183,6 +197,7 @@ def _run_service_request_with_credentials(
         if record is None:
             return
         service = db.get(WorkstationService, record.service_id)
+        user = db.get(User, record.lumitime_user_id)
 
         record.status = "running"
         record.started_at = started
@@ -197,7 +212,7 @@ def _run_service_request_with_credentials(
                 task_config = {}
 
         is_log_auto_submit = service is not None and service.script_key == LOG_AUTO_SUBMIT_SCRIPT_KEY
-        real_log_submit = is_log_auto_submit and settings.real_log_submit_enabled and not settings.dry_run_log_submit_enabled
+        real_log_submit = is_log_auto_submit and _real_log_submit_allowed(service, user) and not settings.dry_run_log_submit_enabled
         prepared_content: PreparedLogContent | None = None
         steps: list[tuple[str, str]] = []
 
@@ -236,9 +251,6 @@ def _run_service_request_with_credentials(
         failure_code: str | None = None
         final_status = "success"
         if service is None or service.deleted_at is not None or service.script_key in {None, "not_integrated"}:
-            final_status = "not_integrated"
-            failure_code = "SERVICE_NOT_INTEGRATED"
-        elif record.script_version and record.script_version != "v0.1.0-mock":
             final_status = "not_integrated"
             failure_code = "SERVICE_NOT_INTEGRATED"
         elif not real_log_submit and ("TIMEOUT" in forced or "timeout" in account_lower):

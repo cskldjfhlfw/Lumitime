@@ -17,7 +17,7 @@ from backend.app.config import Settings, settings
 from backend.app.core import csv_safe_cell, hash_password, request_meta, secure_hash
 from backend.app.database import SessionLocal
 from backend.app.log_submit import prepare_log_content
-from backend.app.models import User
+from backend.app.models import User, WorkstationService
 from backend.app.real_log_submit import _safe_float
 from backend.app.runner import _failure_summary_with_detail
 
@@ -919,6 +919,130 @@ def test_real_submit_adapter_path_is_mockable_without_network(monkeypatch) -> No
         assert "mock submit_example real path" in logs.text
         assert "mock doSave success" in logs.text
         assert "real-path-secret" not in logs.text
+
+
+def test_real_canary_runs_real_submit_for_admin_only(monkeypatch) -> None:
+    from backend.app import runner
+    from backend.app.log_submit import PreparedLogContent
+    from backend.app.real_log_submit import RealSubmitEvent, RealSubmitResult
+
+    calls: list[dict[str, object]] = []
+
+    def fake_real_submit(**kwargs):  # noqa: ANN003, ANN202
+        calls.append(kwargs)
+        return RealSubmitResult(
+            content=PreparedLogContent(
+                source="manual",
+                source_label="手写正文",
+                han_chars=18,
+                target_dates=("2026-06-18",),
+                texts_by_date={"2026-06-18": "这是灰度真实提交测试。"},
+            ),
+            events=[RealSubmitEvent("real_submit", "canary real path")],
+        )
+
+    monkeypatch.setattr(runner, "settings", Settings(environment="development", log_submit_mode="real_canary"))
+    monkeypatch.setattr(runner, "run_real_log_submit", fake_real_submit)
+
+    with TestClient(app) as client:
+        _login(client, "admin", "admin")
+        created = client.post(
+            "/api/v1/workstation/services/service_log_auto_submit/requests",
+            headers=_csrf_headers(client),
+            json={
+                "student_account": "202312345686",
+                "student_password": "admin-canary-secret",
+                "task_config": {
+                    "target_date": "2026-06-18",
+                    "display_name": "管理员灰度",
+                    "sxrz_text": "这是灰度真实提交测试。",
+                },
+            },
+        )
+        assert created.status_code == 201, created.text
+        admin_request_id = created.json()["data"]["service_request_id"]
+        admin_detail = client.get(f"/api/v1/workstation/service-requests/{admin_request_id}")
+        assert admin_detail.status_code == 200
+        assert admin_detail.json()["data"]["status"] == "success"
+        assert "真实提交脚本" in admin_detail.json()["data"]["result_summary"]
+        _logout(client)
+
+        member_name, member_password, _ = _create_member(client)
+        _login(client, member_name, member_password)
+        created_member = client.post(
+            "/api/v1/workstation/services/service_log_auto_submit/requests",
+            headers=_csrf_headers(client),
+            json={
+                "student_account": "202312345687",
+                "student_password": "member-dry-run-secret",
+                "task_config": {
+                    "target_date": "2026-06-18",
+                    "display_name": "普通用户灰度",
+                    "sxrz_text": "这是普通用户灰度干跑测试。",
+                },
+            },
+        )
+        assert created_member.status_code == 201, created_member.text
+        member_request_id = created_member.json()["data"]["service_request_id"]
+        member_detail = client.get(f"/api/v1/workstation/service-requests/{member_request_id}")
+        assert member_detail.status_code == 200
+        assert member_detail.json()["data"]["status"] == "success"
+        assert "本地干跑验收" in member_detail.json()["data"]["result_summary"]
+
+    assert len(calls) == 1
+    assert calls[0]["student_password"] == "admin-canary-secret"
+
+
+def test_real_canary_allows_named_username(monkeypatch) -> None:
+    from backend.app import runner
+
+    canary_settings = Settings(environment="development", log_submit_mode="real_canary")
+    object.__setattr__(canary_settings, "log_submit_canary_usernames", ("allowed_member",))
+    monkeypatch.setattr(runner, "settings", canary_settings)
+
+    with SessionLocal() as db:
+        service = db.get(WorkstationService, "service_log_auto_submit")
+        assert service is not None
+        user = User(
+            id=_uid("user"),
+            username="allowed_member",
+            display_name="Allowed Member",
+            role="invited_user",
+            password_hash=hash_password("member-pass"),
+            status="active",
+        )
+        db.add(user)
+        db.commit()
+        assert runner._real_log_submit_allowed(service, user) is True  # noqa: SLF001
+
+
+def test_api_image_includes_real_submit_runtime_assets() -> None:
+    dockerfile = Path("deploy/docker/Dockerfile.api").read_text(encoding="utf-8")
+
+    assert "nodejs" in dockerfile
+    assert "COPY submit_example /app/submit_example" in dockerfile
+
+
+def test_deploy_workflow_sets_canary_mode_and_preflights_real_submit_image() -> None:
+    workflow = Path(".github/workflows/ci-cd.yml").read_text(encoding="utf-8")
+
+    assert "LOG_SUBMIT_MODE:" in workflow
+    assert "real_canary" in workflow
+    assert "LUMITIME_LOG_SUBMIT_CANARY_USERNAMES" in workflow
+    assert "Real submit image preflight" in workflow
+    assert "_preflight_submit_example_resources" in workflow
+
+
+def test_log_auto_submit_service_metadata_mentions_real_canary() -> None:
+    with TestClient(app):
+        pass
+
+    with SessionLocal() as db:
+        service = db.get(WorkstationService, "service_log_auto_submit")
+
+    assert service is not None
+    assert service.script_version == "v0.2.0-real-canary"
+    assert "real_canary" in (service.description or "")
 
 
 def test_real_submit_preflight_fails_before_network_when_resources_missing(monkeypatch) -> None:

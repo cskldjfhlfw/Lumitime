@@ -324,11 +324,11 @@ def _seed_or_update_services(db: Session, admin_id: str) -> None:
         {
             "id": "service_log_auto_submit",
             "name": "日志自动提交",
-            "summary": "按日志填报模板执行本地验收流程。",
-            "description": "输入模板所需字段后，后端执行本地日志提交验收流程，生成脱敏执行记录；dry_run 模式不会请求真实学校系统。",
+            "summary": "按日志填报模板执行灰度真实提交或本地干跑。",
+            "description": "输入模板所需字段后，后端生成脱敏执行记录；real_canary 模式仅管理员和白名单用户请求真实学校系统，其他用户仍执行干跑。",
             "status": "enabled" if settings.inline_worker_enabled else "disabled",
             "script_key": "log_auto_submit",
-            "script_version": "v0.1.0-mock",
+            "script_version": "v0.2.0-real-canary",
             "input_schema_json": json.dumps(log_input_schema, ensure_ascii=False),
         },
         {

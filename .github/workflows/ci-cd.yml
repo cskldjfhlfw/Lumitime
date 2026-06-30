@@ -19,6 +19,8 @@ env:
   IMAGE_TAG: sha-${{ github.sha }}
   DEPLOY_PATH: /opt/lumitime/app
   PUBLIC_HEALTH_URL: https://yeen666.cn/api/v1/health
+  LOG_SUBMIT_MODE: real_canary
+  LOG_SUBMIT_CANARY_USERNAMES: yeen666
 
 jobs:
   test:
@@ -180,7 +182,7 @@ jobs:
           API_IMAGE_REF="$ACR_VPC_REGISTRY/$ACR_NAMESPACE/$API_IMAGE:$IMAGE_TAG"
           NGINX_IMAGE_REF="$ACR_VPC_REGISTRY/$ACR_NAMESPACE/$NGINX_IMAGE:$IMAGE_TAG"
           ssh -i ~/.ssh/aliyun_deploy_key -p "$ALIYUN_PORT" "$ALIYUN_USER@$ALIYUN_HOST" \
-            "DEPLOY_PATH='$DEPLOY_PATH' API_IMAGE_REF='$API_IMAGE_REF' NGINX_IMAGE_REF='$NGINX_IMAGE_REF' HEALTH_URL='$PUBLIC_HEALTH_URL' bash -s" <<'REMOTE'
+            "DEPLOY_PATH='$DEPLOY_PATH' API_IMAGE_REF='$API_IMAGE_REF' NGINX_IMAGE_REF='$NGINX_IMAGE_REF' HEALTH_URL='$PUBLIC_HEALTH_URL' LOG_SUBMIT_MODE='$LOG_SUBMIT_MODE' LOG_SUBMIT_CANARY_USERNAMES='$LOG_SUBMIT_CANARY_USERNAMES' bash -s" <<'REMOTE'
           set -euo pipefail
           cd "$DEPLOY_PATH"
 
@@ -194,7 +196,8 @@ jobs:
               "LUMITIME_API_IMAGE": os.environ["API_IMAGE_REF"],
               "LUMITIME_NGINX_IMAGE": os.environ["NGINX_IMAGE_REF"],
               "LUMITIME_ENABLE_INLINE_WORKER": "1",
-              "LUMITIME_LOG_SUBMIT_MODE": "dry_run",
+              "LUMITIME_LOG_SUBMIT_MODE": os.environ["LOG_SUBMIT_MODE"],
+              "LUMITIME_LOG_SUBMIT_CANARY_USERNAMES": os.environ["LOG_SUBMIT_CANARY_USERNAMES"],
           }
           seen = set()
           output = []
@@ -213,6 +216,14 @@ jobs:
           PY
 
           docker compose --env-file deploy/.env -f deploy/compose.prod.yml pull api nginx migrate
+          docker compose --env-file deploy/.env -f deploy/compose.prod.yml run --rm --no-deps -T --entrypoint python api - <<'PY'
+          from backend.app.real_log_submit import RealSubmitEvent, _preflight_submit_example_resources
+
+          events = []
+          _preflight_submit_example_resources(events)
+          assert events and isinstance(events[-1], RealSubmitEvent)
+          print("Real submit image preflight passed")
+          PY
           docker compose --env-file deploy/.env -f deploy/compose.prod.yml up -d --no-build --force-recreate migrate api nginx
 
           for attempt in $(seq 1 30); do

@@ -55,6 +55,7 @@ class Settings:
     bootstrap_token: str | None = field(default_factory=lambda: os.getenv("LUMITIME_BOOTSTRAP_TOKEN") or None)
     cors_origins: tuple[str, ...] = field(default_factory=_env_cors_origins)
     log_submit_mode: str = field(default_factory=lambda: os.getenv("LUMITIME_LOG_SUBMIT_MODE", "real").strip().lower())
+    log_submit_canary_usernames: tuple[str, ...] = field(default_factory=lambda: _env_csv("LUMITIME_LOG_SUBMIT_CANARY_USERNAMES", ""))
     deepseek_allowed_base_urls: tuple[str, ...] = field(default_factory=lambda: _env_csv("LUMITIME_DEEPSEEK_ALLOWED_BASE_URLS", DEFAULT_DEEPSEEK_ALLOWED_BASE_URLS))
 
     def __post_init__(self) -> None:
@@ -78,6 +79,10 @@ class Settings:
     @property
     def real_log_submit_enabled(self) -> bool:
         return self.log_submit_mode == "real" and self.environment != "test"
+
+    @property
+    def real_log_submit_canary_enabled(self) -> bool:
+        return self.log_submit_mode in {"real_canary", "canary"} and self.environment != "test"
 
     @property
     def dry_run_log_submit_enabled(self) -> bool:
