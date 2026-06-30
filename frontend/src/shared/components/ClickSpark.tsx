@@ -8,6 +8,7 @@ interface Spark {
 }
 
 interface ClickSparkProps {
+  enabled?: boolean;
   sparkColor?: string;
   sparkSize?: number;
   sparkRadius?: number;
@@ -17,6 +18,7 @@ interface ClickSparkProps {
 }
 
 export default function ClickSpark({
+  enabled = true,
   sparkColor = '#ffffff',
   sparkSize = 10,
   sparkRadius = 15,
@@ -29,6 +31,12 @@ export default function ClickSpark({
   const frameRef = useRef<number>();
 
   useEffect(() => {
+    if (!enabled) {
+      sparksRef.current = [];
+      frameRef.current = undefined;
+      return;
+    }
+
     const canvas = canvasRef.current;
     if (!canvas) return;
     const context = canvas.getContext('2d');
@@ -96,17 +104,21 @@ export default function ClickSpark({
       window.removeEventListener('resize', resize);
       window.removeEventListener('click', handleClick);
       if (frameRef.current) window.cancelAnimationFrame(frameRef.current);
+      frameRef.current = undefined;
+      sparksRef.current = [];
     };
-  }, [duration, sparkColor, sparkCount, sparkRadius]);
+  }, [duration, enabled, sparkColor, sparkCount, sparkRadius, sparkSize]);
 
   return (
     <div className="relative min-h-screen">
       {children}
-      <canvas
-        ref={canvasRef}
-        className="pointer-events-none fixed inset-0 z-[80]"
-        aria-hidden="true"
-      />
+      {enabled && (
+        <canvas
+          ref={canvasRef}
+          className="pointer-events-none fixed inset-0 z-[80]"
+          aria-hidden="true"
+        />
+      )}
     </div>
   );
 }

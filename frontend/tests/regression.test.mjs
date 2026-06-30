@@ -229,17 +229,29 @@ test('react-bits motion chrome uses lumitime themed effects', () => {
   const theme = source('src', 'styles', 'theme.css');
   const profilePage = source('src', 'pages', 'ProfilePage.tsx');
 
+  assert.match(appRoutes, /function OptionalMotionChrome/);
   assert.match(appRoutes, /Ribbons/);
   assert.match(appRoutes, /const cursorTrailEnabled = settings\.cursorTrail/);
-  assert.match(appRoutes, /\{cursorTrailEnabled && \(/);
+  assert.match(appRoutes, /\{enabled && cursorTrailEnabled && \(/);
+  assert.match(appRoutes, /<OptionalCursorTrail enabled=\{isLoggedIn\} \/>/);
+  assert.match(appRoutes, /enabled=\{isLoggedIn\}/);
   assert.match(appRoutes, /sparkColor="var\(--lumitime-spark\)"/);
+  assert.match(source('src', 'shared', 'components', 'ClickSpark.tsx'), /\{enabled && \(/);
   assert.match(profilePage, /光标拖尾/);
   assert.match(profilePage, /setCursorTrail/);
-  assert.match(homePage, /LightRays/);
+  assert.doesNotMatch(homePage, /LightRays/);
   assert.match(theme, /--lumitime-spark:\s*#f4c95d/);
   assert.match(theme, /--lumitime-ribbon:\s*#9ec5e6/);
   assert.match(theme, /--lumitime-ray:\s*#fff7dc/);
   assert.match(theme, /\.pill-nav/);
+});
+
+test('public homepage does not mount continuous canvas effects', () => {
+  const homePage = source('src', 'pages', 'HomePage.tsx');
+
+  assert.doesNotMatch(homePage, /requestAnimationFrame/);
+  assert.doesNotMatch(homePage, /<canvas/);
+  assert.doesNotMatch(homePage, /shared\/components\/LightRays/);
 });
 
 test('profile page contains settings and constrains recent service rows', () => {

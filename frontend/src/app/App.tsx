@@ -157,12 +157,12 @@ function AppRoutes() {
   );
 }
 
-function OptionalCursorTrail() {
+function OptionalCursorTrail({ enabled }: { enabled: boolean }) {
   const { settings } = useSiteSettings();
   const cursorTrailEnabled = settings.cursorTrail;
   return (
     <>
-      {cursorTrailEnabled && (
+      {enabled && cursorTrailEnabled && (
         <Ribbons
           baseThickness={4.5}
           colors={['#9ec5e6', '#f4c95d', '#ffffff']}
@@ -176,21 +176,32 @@ function OptionalCursorTrail() {
   );
 }
 
+function OptionalMotionChrome({ children }: { children: React.ReactNode }) {
+  const { isLoggedIn } = useAuth();
+
+  return (
+    <ClickSpark
+      enabled={isLoggedIn}
+      sparkColor="var(--lumitime-spark)"
+      sparkSize={10}
+      sparkRadius={18}
+      sparkCount={8}
+      duration={400}
+    >
+      <OptionalCursorTrail enabled={isLoggedIn} />
+      {children}
+    </ClickSpark>
+  );
+}
+
 export default function App() {
   return (
     <AuthProvider>
       <NightModeProvider>
         <SiteSettingsProvider>
-          <ClickSpark
-            sparkColor="var(--lumitime-spark)"
-            sparkSize={10}
-            sparkRadius={18}
-            sparkCount={8}
-            duration={400}
-          >
-            <OptionalCursorTrail />
+          <OptionalMotionChrome>
             <AppRoutes />
-          </ClickSpark>
+          </OptionalMotionChrome>
         </SiteSettingsProvider>
       </NightModeProvider>
     </AuthProvider>

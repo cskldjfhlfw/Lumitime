@@ -18,7 +18,6 @@ import { MainNav } from '../layouts/MainNav';
 import { ModuleCard } from '../features/home/components/ModuleCard';
 import { Button } from '../shared/ui/button';
 import { useAuth } from '../app/providers/AuthProvider';
-import LightRays from '../shared/components/LightRays';
 
 const publicModules = [
   {
@@ -74,23 +73,6 @@ export function HomePage() {
 
   return (
     <div className="relative min-h-screen overflow-x-hidden bg-[var(--lumitime-bg)] text-[#171717] dark:text-[#f5f2ea]">
-      <div className="pointer-events-none absolute inset-x-0 top-0 h-[680px] overflow-hidden">
-        <LightRays
-          raysOrigin="top-center"
-          raysColor="#fff7dc"
-          raysSpeed={0.82}
-          lightSpread={0.52}
-          rayLength={2.8}
-          followMouse
-          mouseInfluence={0.08}
-          noiseAmount={0.02}
-          distortion={0.04}
-          className="opacity-80"
-          pulsating={false}
-          fadeDistance={0.95}
-          saturation={1.04}
-        />
-      </div>
       <MainNav isLoggedIn={isLoggedIn} isAdmin={isAdmin} userLabel={user?.displayName} onLogout={logout} />
 
       <main className="relative z-10">
