@@ -56,12 +56,19 @@ LUMITIME_SSL_CERTIFICATE_KEY=/etc/nginx/certs/privkey.pem
 
 如果同时解析 `www.yeen666.cn`，需要把 `LUMITIME_SERVER_NAME` 写成 `yeen666.cn www.yeen666.cn`，并把 `LUMITIME_CORS_ORIGINS` 写成 `https://yeen666.cn,https://www.yeen666.cn`。
 
-构建镜像、执行迁移并启动：
+生产环境推荐由 GitHub Actions 构建镜像并推送到阿里云 ACR，服务器只拉取已经构建好的镜像。`deploy/.env` 中的镜像变量使用 ACR 内网地址和不可变标签，例如：
+
+```dotenv
+LUMITIME_API_IMAGE=crpi-1qmuw0ewrqqeai38-vpc.cn-beijing.personal.cr.aliyuncs.com/yeen/lumitime_api:sha-<git-sha>
+LUMITIME_NGINX_IMAGE=crpi-1qmuw0ewrqqeai38-vpc.cn-beijing.personal.cr.aliyuncs.com/yeen/lumitime_nginx:sha-<git-sha>
+```
+
+首次部署或手动部署时，先登录 ACR，再拉取镜像、执行迁移并启动：
 
 ```bash
-docker compose --env-file deploy/.env -f deploy/compose.prod.yml build
-docker compose --env-file deploy/.env -f deploy/compose.prod.yml run --rm migrate
-docker compose --env-file deploy/.env -f deploy/compose.prod.yml up -d db api nginx
+docker login --username=aliyun1054531571 crpi-1qmuw0ewrqqeai38-vpc.cn-beijing.personal.cr.aliyuncs.com
+docker compose --env-file deploy/.env -f deploy/compose.prod.yml pull api nginx migrate
+docker compose --env-file deploy/.env -f deploy/compose.prod.yml up -d db migrate api nginx
 ```
 
 检查健康状态：
@@ -140,19 +147,39 @@ curl -fsS https://lumitime.example.com/api/v1/health
 
 ## 6. 更新发布
 
-更新前先备份：
+正常更新发布由 GitHub Actions 自动完成：
+
+1. `pull_request` 到 `main` 时只跑测试和前端构建，不推镜像、不部署。
+2. `main` push 或手动触发 workflow 后，GitHub Actions 跑测试。
+3. 测试通过后构建两个镜像：`yeen/lumitime_api` 和 `yeen/lumitime_nginx`。
+4. 镜像推送到阿里云 ACR 公网地址。
+5. Actions 通过部署 SSH key 登录 ECS。
+6. ECS 使用 ACR 内网地址拉取 `sha-<git-sha>` 标签。
+7. ECS 更新 `deploy/.env` 中的镜像标签，执行迁移，重建 `api/nginx`，最后检查 `https://yeen666.cn/api/v1/health`。
+
+需要的 GitHub Actions Secrets：
+
+```text
+ACR_USERNAME=aliyun1054531571
+ACR_PASSWORD=<阿里云 ACR 访问凭证密码>
+ALIYUN_SSH_KEY=<部署专用 SSH 私钥全文>
+ALIYUN_HOST=47.93.31.206
+ALIYUN_USER=root
+ALIYUN_PORT=22
+```
+
+手动更新前先备份：
 
 ```bash
 docker compose --env-file deploy/.env -f deploy/compose.prod.yml run --rm backup
 ```
 
-拉取新代码后执行：
+手动指定新镜像标签后执行：
 
 ```bash
-docker compose --env-file deploy/.env -f deploy/compose.prod.yml build
-docker compose --env-file deploy/.env -f deploy/compose.prod.yml run --rm migrate
-docker compose --env-file deploy/.env -f deploy/compose.prod.yml up -d db api nginx
-curl -fsS https://lumitime.example.com/api/v1/health
+docker compose --env-file deploy/.env -f deploy/compose.prod.yml pull api nginx migrate
+docker compose --env-file deploy/.env -f deploy/compose.prod.yml up -d migrate api nginx
+curl -fsS https://yeen666.cn/api/v1/health
 ```
 
-生产建议把 `LUMITIME_API_IMAGE` 和 `LUMITIME_NGINX_IMAGE` 改为带版本号的镜像标签，例如 `registry.example.com/lumitime-api:v0.1.0`，便于回滚。
+生产使用 `sha-<git-sha>` 这类不可变镜像标签，回滚时把 `deploy/.env` 中的两个镜像标签改回上一版，再执行上面的 `pull` 和 `up -d`。

@@ -1,13 +1,5 @@
 name: lumitime
 
-x-api-build: &api-build
-  context: ..
-  dockerfile: deploy/docker/Dockerfile.api
-
-x-nginx-build: &nginx-build
-  context: ..
-  dockerfile: deploy/docker/Dockerfile.nginx
-
 x-api-environment: &api-environment
   LUMITIME_ENV: production
   LUMITIME_DATABASE_URL: ${LUMITIME_DATABASE_URL:?set LUMITIME_DATABASE_URL in deploy/.env}
@@ -49,7 +41,6 @@ services:
 
   migrate:
     image: ${LUMITIME_API_IMAGE:-lumitime-api:local}
-    build: *api-build
     restart: "no"
     depends_on:
       db:
@@ -60,7 +51,6 @@ services:
 
   api:
     image: ${LUMITIME_API_IMAGE:-lumitime-api:local}
-    build: *api-build
     restart: unless-stopped
     depends_on:
       db:
@@ -86,7 +76,6 @@ services:
 
   nginx:
     image: ${LUMITIME_NGINX_IMAGE:-lumitime-nginx:local}
-    build: *nginx-build
     restart: unless-stopped
     depends_on:
       api:
