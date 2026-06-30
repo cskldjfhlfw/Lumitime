@@ -13,6 +13,7 @@ env:
   ACR_REGISTRY: crpi-1qmuw0ewrqqeai38.cn-beijing.personal.cr.aliyuncs.com
   ACR_VPC_REGISTRY: crpi-1qmuw0ewrqqeai38-vpc.cn-beijing.personal.cr.aliyuncs.com
   ACR_NAMESPACE: yeen
+  ACR_USERNAME: aliyun1054531571
   API_IMAGE: lumitime_api
   NGINX_IMAGE: lumitime_nginx
   IMAGE_TAG: sha-${{ github.sha }}
@@ -81,11 +82,10 @@ jobs:
 
       - name: Check ACR secrets
         env:
-          ACR_USERNAME: ${{ secrets.ACR_USERNAME }}
-          ACR_PASSWORD: ${{ secrets.ACR_PASSWORD }}
+          ACR_PASSWORD: ${{ secrets.ACR_PASSWORD || secrets.ALIYUN_ACR_PASSWORD || secrets.REGISTRY_PASSWORD }}
         run: |
-          if [ -z "$ACR_USERNAME" ] || [ -z "$ACR_PASSWORD" ]; then
-            echo "::error::Missing repository secrets ACR_USERNAME or ACR_PASSWORD."
+          if [ -z "$ACR_PASSWORD" ]; then
+            echo "::error::Missing repository secret ACR_PASSWORD."
             exit 1
           fi
 
@@ -93,8 +93,8 @@ jobs:
         uses: docker/login-action@v3
         with:
           registry: ${{ env.ACR_REGISTRY }}
-          username: ${{ secrets.ACR_USERNAME }}
-          password: ${{ secrets.ACR_PASSWORD }}
+          username: ${{ env.ACR_USERNAME }}
+          password: ${{ secrets.ACR_PASSWORD || secrets.ALIYUN_ACR_PASSWORD || secrets.REGISTRY_PASSWORD }}
 
       - name: Build and push API image
         uses: docker/build-push-action@v6
@@ -133,12 +133,11 @@ jobs:
 
       - name: Check deploy secrets
         env:
-          ACR_USERNAME: ${{ secrets.ACR_USERNAME }}
-          ACR_PASSWORD: ${{ secrets.ACR_PASSWORD }}
+          ACR_PASSWORD: ${{ secrets.ACR_PASSWORD || secrets.ALIYUN_ACR_PASSWORD || secrets.REGISTRY_PASSWORD }}
           ALIYUN_SSH_KEY: ${{ secrets.ALIYUN_SSH_KEY }}
         run: |
-          if [ -z "$ACR_USERNAME" ] || [ -z "$ACR_PASSWORD" ]; then
-            echo "::error::Missing repository secrets ACR_USERNAME or ACR_PASSWORD."
+          if [ -z "$ACR_PASSWORD" ]; then
+            echo "::error::Missing repository secret ACR_PASSWORD."
             exit 1
           fi
           if [ -z "$ALIYUN_SSH_KEY" ]; then
@@ -170,8 +169,7 @@ jobs:
 
       - name: Log in to ACR from ECS
         env:
-          ACR_USERNAME: ${{ secrets.ACR_USERNAME }}
-          ACR_PASSWORD: ${{ secrets.ACR_PASSWORD }}
+          ACR_PASSWORD: ${{ secrets.ACR_PASSWORD || secrets.ALIYUN_ACR_PASSWORD || secrets.REGISTRY_PASSWORD }}
         run: |
           printf '%s' "$ACR_PASSWORD" \
             | ssh -i ~/.ssh/aliyun_deploy_key -p "$ALIYUN_PORT" "$ALIYUN_USER@$ALIYUN_HOST" \
