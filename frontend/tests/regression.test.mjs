@@ -24,12 +24,12 @@ test('login and register pages do not expose fixed demo credentials', () => {
   assert.doesNotMatch(visibleText, /LUMI-A1B2/);
 });
 
-test('login page dynamic light rays are code-gated off by default', () => {
+test('login page has no dynamic light rays effect', () => {
   const loginPage = source('src', 'pages', 'LoginPage.tsx');
 
-  assert.match(loginPage, /const ENABLE_LOGIN_LIGHT_RAYS = false/);
-  assert.match(loginPage, /\{ENABLE_LOGIN_LIGHT_RAYS && \(/);
-  assert.match(loginPage, /LightRays/);
+  assert.doesNotMatch(loginPage, /LightRays/);
+  assert.doesNotMatch(loginPage, /ENABLE_LOGIN_LIGHT_RAYS/);
+  assert.doesNotMatch(loginPage, /shared\/components\/LightRays/);
 });
 
 test('api client attaches csrf token only to mutating requests', () => {
@@ -226,7 +226,6 @@ test('site chrome prevents horizontal page dragging and nav active flash', () =>
 test('react-bits motion chrome uses lumitime themed effects', () => {
   const appRoutes = source('src', 'app', 'App.tsx');
   const homePage = source('src', 'pages', 'HomePage.tsx');
-  const loginPage = source('src', 'pages', 'LoginPage.tsx');
   const theme = source('src', 'styles', 'theme.css');
   const profilePage = source('src', 'pages', 'ProfilePage.tsx');
 
@@ -237,7 +236,6 @@ test('react-bits motion chrome uses lumitime themed effects', () => {
   assert.match(profilePage, /光标拖尾/);
   assert.match(profilePage, /setCursorTrail/);
   assert.match(homePage, /LightRays/);
-  assert.match(loginPage, /LightRays/);
   assert.match(theme, /--lumitime-spark:\s*#f4c95d/);
   assert.match(theme, /--lumitime-ribbon:\s*#9ec5e6/);
   assert.match(theme, /--lumitime-ray:\s*#fff7dc/);

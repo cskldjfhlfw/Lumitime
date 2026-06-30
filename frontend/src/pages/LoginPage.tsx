@@ -9,11 +9,8 @@ import { LightBeam } from '../features/auth/components/LightBeam';
 import { FallingFigure } from '../features/auth/components/FallingFigure';
 import { InteractiveCat } from '../features/auth/components/InteractiveCat';
 import { useAuth } from '../app/providers/AuthProvider';
-import LightRays from '../shared/components/LightRays';
 
 type LoginState = 'idle' | 'loading' | 'flipping' | 'done';
-
-const ENABLE_LOGIN_LIGHT_RAYS = false;
 
 export function LoginPage() {
   const navigate = useNavigate();
@@ -90,25 +87,6 @@ export function LoginPage() {
         animate={{ opacity: 1, x: 0 }}
         transition={{ duration: 0.6, delay: 0.2 }}
       >
-        {ENABLE_LOGIN_LIGHT_RAYS && (
-          <div className="pointer-events-none absolute inset-0">
-            <LightRays
-              raysOrigin="top-center"
-              raysColor="#fff7dc"
-              raysSpeed={0.74}
-              lightSpread={0.48}
-              rayLength={2.4}
-              followMouse
-              mouseInfluence={0.07}
-              noiseAmount={0.02}
-              distortion={0.03}
-              className="opacity-75"
-              pulsating={false}
-              fadeDistance={0.88}
-              saturation={1.02}
-            />
-          </div>
-        )}
         <div className="relative z-10 mx-auto w-full max-w-sm">
           <div className="mb-10">
             <h1
