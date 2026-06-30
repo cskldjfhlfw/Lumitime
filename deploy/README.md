@@ -160,13 +160,14 @@ curl -fsS https://lumitime.example.com/api/v1/health
 需要的 GitHub Actions Secrets：
 
 ```text
-ACR_USERNAME=aliyun1054531571
-ACR_PASSWORD=<阿里云 ACR 访问凭证密码>
+ALIYUN1054531571=<阿里云 ACR 访问凭证密码>
 ALIYUN_SSH_KEY=<部署专用 SSH 私钥全文>
 ALIYUN_HOST=47.93.31.206
 ALIYUN_USER=root
 ALIYUN_PORT=22
 ```
+
+ACR 登录用户名已固定在 workflow 中：`aliyun1054531571`。`ALIYUN_HOST`、`ALIYUN_USER`、`ALIYUN_PORT` 有默认值，不配置也会使用当前 ECS：`root@47.93.31.206:22`。
 
 手动更新前先备份：
 
