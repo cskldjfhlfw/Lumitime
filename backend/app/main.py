@@ -11,12 +11,14 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 from .config import settings
 from .core import ApiError, error_response, make_response, public_request_id
 from .db_lifecycle import initialize_database_for_runtime
+from .rate_limit import RateLimit, check_rate_limit, rate_limit_key
 from .routes import admin, auth, content, public, workstation
 from .runner import reconcile_pending_requests_after_startup
 from .seed import seed_runtime_data, seed_runtime_workstation_services
 
 
 CSRF_SAFE_METHODS = {"GET", "HEAD", "OPTIONS"}
+GLOBAL_API_RATE_LIMIT = RateLimit(max_attempts=900, window_seconds=60.0)
 CSRF_EXEMPT_PATHS = {
     f"{settings.api_prefix}/auth/bootstrap-admin",
     f"{settings.api_prefix}/auth/login",
@@ -71,6 +73,22 @@ async def csrf_middleware(request: Request, call_next):
         csrf_header = request.headers.get("x-csrf-token")
         if not csrf_cookie or not csrf_header or not _csrf_tokens_match(csrf_cookie, csrf_header):
             return error_response(request, "FORBIDDEN", "CSRF 校验失败。", 403)
+    return await call_next(request)
+
+
+@app.middleware("http")
+async def global_rate_limit_middleware(request: Request, call_next):
+    if request.url.path.startswith(settings.api_prefix):
+        try:
+            check_rate_limit(rate_limit_key(request, "global"), GLOBAL_API_RATE_LIMIT)
+        except ApiError as exc:
+            detail = exc.detail if isinstance(exc.detail, dict) else {}
+            return error_response(
+                request,
+                detail.get("code", "RATE_LIMITED"),
+                detail.get("message", "请求过于频繁，请稍后再试。"),
+                exc.status_code,
+            )
     return await call_next(request)
 
 

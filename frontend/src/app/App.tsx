@@ -44,7 +44,7 @@ function AppRoutes() {
         <Route path="/login" element={<LoginPage />} />
         <Route path="/register" element={<RegisterPage />} />
         <Route path="/notes" element={<NotesPage />} />
-        <Route path="/dashboard" element={<DashboardPage />} />
+        <Route path="/dashboard" element={<ProtectedRoute><DashboardPage /></ProtectedRoute>} />
         <Route
           path="/scripts"
           element={<ProtectedRoute><ContentPage kind="scripts" /></ProtectedRoute>}

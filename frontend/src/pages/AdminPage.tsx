@@ -100,6 +100,7 @@ import {
   type BackendMessage,
   type BackendServiceRequest,
   type BackendUser,
+  type ContentVisibility,
   type ContentType,
   type DashboardSnapshot,
 } from '../shared/api/lumitimeApi';
@@ -113,6 +114,7 @@ type ConfirmAction = {
 };
 
 type ContentStatus = 'all' | 'draft' | 'published' | 'unpublished';
+type ContentVisibilityForm = ContentVisibility;
 type MessageStatusFilter = 'all' | 'visible' | 'hidden';
 type EnabledStatusFilter = 'all' | 'enabled' | 'disabled';
 type InviteStatusFilter = 'all' | 'active' | 'disabled' | 'expired';
@@ -364,6 +366,8 @@ function InvitesSection({ requestConfirm }: { requestConfirm: (action: ConfirmAc
   const [creating, setCreating] = useState(false);
   const [usageInvite, setUsageInvite] = useState<BackendInvite | null>(null);
   const [usage, setUsage] = useState<BackendInviteUsage[]>([]);
+  const [usagePage, setUsagePage] = useState(1);
+  const [usageTotal, setUsageTotal] = useState(0);
   const [usageLoading, setUsageLoading] = useState(false);
   const [form, setForm] = useState({ usage_limit: '1', expires_at: '', remark: '' });
 
@@ -414,15 +418,18 @@ function InvitesSection({ requestConfirm }: { requestConfirm: (action: ConfirmAc
     }
   };
 
-  const openUsage = async (invite: BackendInvite) => {
+  const loadUsage = async (invite: BackendInvite, nextPage = 1) => {
     setUsageInvite(invite);
+    setUsagePage(nextPage);
     setUsageLoading(true);
     try {
-      const payload = await adminInviteUsageApi(invite.id);
+      const payload = await adminInviteUsageApi(invite.id, { page: nextPage, page_size: ADMIN_PAGE_SIZE });
       setUsage(payload.data.items);
+      setUsageTotal(payload.data.total);
     } catch (error) {
       toast.error(apiErrorMessage(error, '使用记录加载失败。'));
       setUsage([]);
+      setUsageTotal(0);
     } finally {
       setUsageLoading(false);
     }
@@ -463,7 +470,7 @@ function InvitesSection({ requestConfirm }: { requestConfirm: (action: ConfirmAc
             <RowMenu
               items={[
                 { label: '复制', icon: Copy, onClick: () => copyText(invite.code, '邀请码已复制。') },
-                { label: '使用记录', icon: Eye, onClick: () => void openUsage(invite) },
+                { label: '使用记录', icon: Eye, onClick: () => void loadUsage(invite) },
                 {
                   label: '禁用',
                   icon: PowerOff,
@@ -526,6 +533,16 @@ function InvitesSection({ requestConfirm }: { requestConfirm: (action: ConfirmAc
                   </div>
                 ))}
               </div>
+            )}
+            {usageInvite && (
+              <Pager
+                page={usagePage}
+                pageSize={ADMIN_PAGE_SIZE}
+                total={usageTotal}
+                loading={usageLoading}
+                onPageChange={nextPage => void loadUsage(usageInvite, nextPage)}
+                className="mt-5"
+              />
             )}
           </div>
         </SheetContent>
@@ -762,6 +779,7 @@ function ContentAdminSection({ type, requestConfirm }: { type: ContentType; requ
         category: form.category.trim() || null,
         tags: parseTags(form.tags),
         status: form.status,
+        visibility: form.visibility,
         allow_copy: form.allow_copy,
       };
       if (editing) {
@@ -817,18 +835,19 @@ function ContentAdminSection({ type, requestConfirm }: { type: ContentType; requ
       </Toolbar>
 
       {error && <ErrorState message={error} onRetry={() => setRefresh(v => v + 1)} compact />}
-      <DataShell headers={['标题', '状态', '标签', '更新时间', '']} template="1fr 100px 150px 170px 42px" minWidth={780}>
+      <DataShell headers={['标题', '状态', '展示位置', '标签', '更新时间', '']} template="1fr 100px 120px 150px 170px 42px" minWidth={900}>
         {loading ? (
-          <TableLoading colSpan={5} />
+          <TableLoading colSpan={6} />
         ) : items.length === 0 ? (
           <TableEmpty text={`暂无${contentTypeLabel[type]}`} />
         ) : items.map(item => (
-          <DataRow key={item.id} template="1fr 100px 150px 170px 42px">
+          <DataRow key={item.id} template="1fr 100px 120px 150px 170px 42px">
             <div className="min-w-0">
               <p className="truncate text-sm font-medium text-gray-800">{item.title}</p>
               <p className="truncate text-xs text-gray-400">{item.summary || item.desc || '-'}</p>
             </div>
             <ContentStatusBadge status={item.status || 'draft'} />
+            <ContentVisibilityBadge visibility={item.visibility || 'invited_only'} />
             <span className="truncate text-xs text-gray-500">{item.tag || item.category || item.language || '-'}</span>
             <span className="text-xs text-gray-400">{formatDateTime(item.updated_at || item.updatedAt)}</span>
             <RowMenu
@@ -925,6 +944,14 @@ function ContentAdminSection({ type, requestConfirm }: { type: ContentType; requ
                     <option value="unpublished">已下架</option>
                   </NativeSelect>
                 </Field>
+                <Field label="展示位置">
+                  <NativeSelect value={form.visibility} onChange={value => setForm(prev => ({ ...prev, visibility: value as ContentVisibilityForm }))}>
+                    <option value="invited_only">受邀内容</option>
+                    <option value="home_showcase">首页展示</option>
+                  </NativeSelect>
+                </Field>
+              </div>
+              <div className="grid gap-3 sm:grid-cols-2">
                 <CheckboxField
                   label="允许复制脚本"
                   checked={form.allow_copy}
@@ -1010,6 +1037,7 @@ function MessagesSection({ requestConfirm }: { requestConfirm: (action: ConfirmA
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [refresh, setRefresh] = useState(0);
+  const [detail, setDetail] = useState<BackendMessage | null>(null);
 
   useEffect(() => {
     let alive = true;
@@ -1070,6 +1098,7 @@ function MessagesSection({ requestConfirm }: { requestConfirm: (action: ConfirmA
             <span className="text-xs text-gray-400">{formatDateTime(message.created_at || message.createdAt)}</span>
             <RowMenu
               items={[
+                { label: '查看详情', icon: Eye, onClick: () => setDetail(message) },
                 {
                   label: message.status === 'visible' ? '隐藏' : '恢复',
                   icon: message.status === 'visible' ? PowerOff : Power,
@@ -1111,6 +1140,78 @@ function MessagesSection({ requestConfirm }: { requestConfirm: (action: ConfirmA
         ))}
       </DataShell>
       <Pager page={page} pageSize={ADMIN_PAGE_SIZE} total={total} loading={loading} onPageChange={setPage} />
+
+      <Sheet open={!!detail} onOpenChange={open => !open && setDetail(null)}>
+        <SheetContent className="w-full overflow-y-auto sm:max-w-lg">
+          <SheetHeader className="mb-5">
+            <SheetTitle>留言详情</SheetTitle>
+            <SheetDescription>{detail?.id}</SheetDescription>
+          </SheetHeader>
+          {detail && (
+            <div className="space-y-4 px-4 pb-8">
+              <AdminDetail label="昵称">{detail.nickname}</AdminDetail>
+              <AdminDetail label="状态"><MessageStatus status={detail.status} /></AdminDetail>
+              <AdminDetail label="创建时间">{formatDateTime(detail.created_at || detail.createdAt)}</AdminDetail>
+              <div>
+                <p className="mb-2 text-xs text-gray-400">留言内容</p>
+                <div className="whitespace-pre-wrap rounded-lg border border-gray-100 bg-gray-50 p-4 text-sm leading-7 text-gray-700">
+                  {detail.content}
+                </div>
+              </div>
+              <div className="grid gap-2 sm:grid-cols-2">
+                <Button
+                  variant="outline"
+                  className="border-gray-200"
+                  onClick={() => {
+                    const current = detail;
+                    setDetail(null);
+                    requestConfirm({
+                      title: current.status === 'visible' ? '隐藏留言' : '恢复留言',
+                      description: current.status === 'visible' ? '隐藏后该留言不会在前台公开显示。' : '恢复后该留言会重新进入公开列表。',
+                      actionLabel: current.status === 'visible' ? '隐藏' : '恢复',
+                      danger: current.status === 'visible',
+                      onConfirm: async () => {
+                        if (current.status === 'visible') {
+                          await adminHideMessageApi(current.id);
+                        } else {
+                          await adminRestoreMessageApi(current.id);
+                        }
+                        toast.success('留言状态已更新。');
+                        setRefresh(v => v + 1);
+                      },
+                    });
+                  }}
+                >
+                  {detail.status === 'visible' ? <PowerOff size={14} /> : <Power size={14} />}
+                  {detail.status === 'visible' ? '隐藏留言' : '恢复留言'}
+                </Button>
+                <Button
+                  variant="outline"
+                  className="border-red-100 text-red-600 hover:bg-red-50 hover:text-red-700"
+                  onClick={() => {
+                    const current = detail;
+                    setDetail(null);
+                    requestConfirm({
+                      title: '删除留言',
+                      description: '删除后留言会按后端语义移出管理列表和前台展示。',
+                      actionLabel: '删除',
+                      danger: true,
+                      onConfirm: async () => {
+                        await adminDeleteMessageApi(current.id);
+                        toast.success('留言已删除。');
+                        setRefresh(v => v + 1);
+                      },
+                    });
+                  }}
+                >
+                  <Trash2 size={14} />
+                  删除留言
+                </Button>
+              </div>
+            </div>
+          )}
+        </SheetContent>
+      </Sheet>
     </div>
   );
 }
@@ -1430,6 +1531,9 @@ function ServiceRecordsSection() {
           导出 CSV
         </Button>
       </Toolbar>
+      {services.length >= ADMIN_SERVICE_FILTER_PAGE_SIZE && (
+        <p className="text-xs text-gray-400">服务筛选下拉仅加载最近 {ADMIN_SERVICE_FILTER_PAGE_SIZE} 个服务，更多服务请使用 service_request_id 或导出条件精确筛选。</p>
+      )}
 
       {error && <ErrorState message={error} onRetry={() => setRefresh(v => v + 1)} compact />}
       <DataShell headers={['service_request_id', '服务名称', '状态', '账号掩码', 'failure_code', '提交时间', '']} template="210px 1fr 90px 130px 150px 170px 42px" minWidth={1040}>
@@ -1824,8 +1928,10 @@ function RowMenu({
 }: {
   items: { label: string; icon: ElementType; danger?: boolean; disabled?: boolean; onClick: () => void }[];
 }) {
+  const [open, setOpen] = useState(false);
+
   return (
-    <DropdownMenu>
+    <DropdownMenu open={open} onOpenChange={setOpen}>
       <DropdownMenuTrigger asChild>
         <Button variant="ghost" size="icon" className="h-7 w-7">
           <MoreHorizontal size={13} />
@@ -1838,7 +1944,11 @@ function RowMenu({
             <DropdownMenuItem
               key={item.label}
               className={item.danger ? 'gap-2 text-red-600 focus:text-red-600' : 'gap-2'}
-              onClick={item.onClick}
+              onSelect={event => {
+                event.preventDefault();
+                setOpen(false);
+                window.setTimeout(item.onClick, 0);
+              }}
               disabled={item.disabled}
             >
               <Icon size={12} />
@@ -1934,6 +2044,11 @@ function ContentStatusBadge({ status }: { status: string }) {
   return <span className="text-xs text-gray-400">已下架</span>;
 }
 
+function ContentVisibilityBadge({ visibility }: { visibility: string }) {
+  if (visibility === 'home_showcase') return <span className="text-xs text-blue-600">首页展示</span>;
+  return <span className="text-xs text-gray-400">受邀内容</span>;
+}
+
 function MessageStatus({ status }: { status: string }) {
   return status === 'visible'
     ? <span className="text-xs text-emerald-600">公开</span>
@@ -1969,6 +2084,7 @@ function blankContentForm(type: ContentType) {
     category: '',
     tags: '',
     status: 'draft' as ContentStatus,
+    visibility: 'invited_only' as ContentVisibilityForm,
     allow_copy: true,
   };
 }
@@ -1983,6 +2099,7 @@ function contentToForm(item: BackendContent) {
     category: item.category || '',
     tags: (item.tags || []).join(', '),
     status: (item.status || 'draft') as ContentStatus,
+    visibility: (item.visibility === 'home_showcase' ? 'home_showcase' : 'invited_only') as ContentVisibilityForm,
     allow_copy: item.allow_copy !== false,
   };
 }

@@ -13,8 +13,8 @@ def _csrf_headers(client: TestClient) -> dict[str, str]:
 
 def test_core_contract_and_privacy() -> None:
     with TestClient(app) as client:
-        assert client.get("/api/v1/dashboard/metrics").status_code == 200
         assert client.get("/api/v1/messages").status_code == 200
+        assert client.get("/api/v1/dashboard/metrics").status_code == 401
 
         guest_scripts = client.get("/api/v1/scripts")
         assert guest_scripts.status_code == 401
@@ -23,6 +23,7 @@ def test_core_contract_and_privacy() -> None:
         login = client.post("/api/v1/auth/login", json={"username": "member", "password": "member123"})
         assert login.status_code == 200
         assert login.json()["data"]["user"]["role"] == "invited_user"
+        assert client.get("/api/v1/dashboard/metrics").status_code == 200
 
         assert client.get("/api/v1/admin/users").status_code == 403
         assert client.get("/api/v1/scripts").status_code == 200

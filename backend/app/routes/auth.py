@@ -1,9 +1,6 @@
 from __future__ import annotations
 
 import hmac
-from collections import defaultdict, deque
-from time import monotonic
-
 from fastapi import APIRouter, Depends, Request, Response
 from sqlalchemy import delete, select
 from sqlalchemy.orm import Session
@@ -14,33 +11,22 @@ from ..core import ApiError, as_naive_utc, created, hash_password, make_response
 from ..database import get_db
 from ..deps import clear_session_cookie, create_session, delete_user_sessions, require_auth
 from ..models import InviteCode, InviteCodeUsage, SessionRecord, User
+from ..rate_limit import RateLimit, check_rate_limit, rate_limit_key, reset_rate_limit
 from ..schemas import BootstrapAdminBody, ChangePasswordBody, LoginBody, RegisterWithInviteBody
 from ..serializers import user_public
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
-_LOGIN_ATTEMPTS: defaultdict[str, deque[float]] = defaultdict(deque)
-_LOGIN_LIMIT = 5
-_LOGIN_WINDOW_SECONDS = 60.0
+LOGIN_RATE_LIMIT = RateLimit(max_attempts=5, window_seconds=60.0)
+REGISTER_RATE_LIMIT = RateLimit(max_attempts=3, window_seconds=60.0)
 
 
 def _login_bucket(request: Request, username: str) -> str:
-    ip_hash, _ = request_meta(request)
-    return f"{username.lower()}:{ip_hash or 'unknown'}"
-
-
-def _check_login_rate_limit(bucket: str) -> None:
-    now = monotonic()
-    attempts = _LOGIN_ATTEMPTS[bucket]
-    while attempts and now - attempts[0] > _LOGIN_WINDOW_SECONDS:
-        attempts.popleft()
-    if len(attempts) >= _LOGIN_LIMIT:
-        raise ApiError("RATE_LIMITED", "登录尝试过于频繁，请稍后再试。")
-    attempts.append(now)
+    return rate_limit_key(request, "login", username)
 
 
 def _reset_login_bucket(bucket: str) -> None:
-    _LOGIN_ATTEMPTS.pop(bucket, None)
+    reset_rate_limit(bucket)
 
 
 @router.post("/bootstrap-admin")
@@ -83,7 +69,7 @@ def bootstrap_admin(body: BootstrapAdminBody, request: Request, db: Session = De
 @router.post("/login")
 def login(body: LoginBody, request: Request, response: Response, db: Session = Depends(get_db)):
     bucket = _login_bucket(request, body.username)
-    _check_login_rate_limit(bucket)
+    check_rate_limit(bucket, LOGIN_RATE_LIMIT, "登录尝试过于频繁，请稍后再试。")
     user = db.scalar(select(User).where(User.username == body.username, User.deleted_at.is_(None)))
     if user is None or not verify_password(body.password, user.password_hash):
         write_audit(
@@ -133,6 +119,11 @@ def me(request: Request, user: User = Depends(require_auth)):
 
 @router.post("/register-with-invite")
 def register_with_invite(body: RegisterWithInviteBody, request: Request, db: Session = Depends(get_db)):
+    check_rate_limit(
+        rate_limit_key(request, "register", body.invite_code),
+        REGISTER_RATE_LIMIT,
+        "注册尝试过于频繁，请稍后再试。",
+    )
     exists = db.scalar(select(User).where(User.username == body.username))
     if exists:
         raise ApiError("CONFLICT", "用户名已存在。")

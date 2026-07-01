@@ -50,6 +50,7 @@ class ContentCreateBody(BaseModel):
     category: str | None = None
     tags: list[str] = Field(default_factory=list)
     status: str = Field(default="draft", pattern="^(draft|published|unpublished)$")
+    visibility: str = Field(default="invited_only", pattern="^(invited_only|home_showcase)$")
     allow_copy: bool = True
 
 
@@ -62,6 +63,7 @@ class ContentPatchBody(BaseModel):
     category: str | None = None
     tags: list[str] | None = None
     status: str | None = Field(default=None, pattern="^(draft|published|unpublished)$")
+    visibility: str | None = Field(default=None, pattern="^(invited_only|home_showcase)$")
     allow_copy: bool | None = None
 
 

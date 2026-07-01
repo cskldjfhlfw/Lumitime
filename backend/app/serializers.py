@@ -84,6 +84,7 @@ def content_public(item: ContentItem, detail: bool = False, admin: bool = False)
         "tag": item.language or item.category or (tags[0] if tags else None),
         "tags": tags,
         "status": item.status,
+        "visibility": item.visibility,
         "updated_at": iso(item.updated_at),
         "updatedAt": item.updated_at.date().isoformat() if item.updated_at else None,
     }

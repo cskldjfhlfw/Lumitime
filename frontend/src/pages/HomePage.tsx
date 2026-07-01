@@ -1,75 +1,43 @@
+import { useEffect, useState, type ReactNode } from 'react';
 import { motion } from 'motion/react';
 import {
   ArrowRight,
-  BookOpen,
-  Code2,
-  Image,
   KeyRound,
   LayoutDashboard,
   LockKeyhole,
   LogIn,
-  Monitor,
-  Pencil,
   ShieldCheck,
   Sparkles,
 } from 'lucide-react';
 import { useNavigate } from 'react-router';
 import { MainNav } from '../layouts/MainNav';
-import { ModuleCard } from '../features/home/components/ModuleCard';
 import { Button } from '../shared/ui/button';
 import { useAuth } from '../app/providers/AuthProvider';
-
-const publicModules = [
-  {
-    icon: <Monitor size={18} />,
-    title: '大屏看板',
-    description: '只展示聚合指标，作为公开站点状态的一扇窗。',
-    route: '/dashboard',
-    locked: false,
-  },
-  {
-    icon: <Pencil size={18} />,
-    title: '随记',
-    description: '公开留言与时间片段，保留那些值得回看的微光。',
-    route: '/notes',
-    locked: false,
-  },
-];
-
-const invitedModules = [
-  {
-    icon: <Image size={18} />,
-    title: '个人作品',
-    description: '项目、设计、方案和创作成果的归档入口。',
-    route: '/works',
-    locked: true,
-  },
-  {
-    icon: <BookOpen size={18} />,
-    title: '经验心得',
-    description: '技术复盘、方法沉淀与成长记录。',
-    route: '/blogs',
-    locked: true,
-  },
-  {
-    icon: <Code2 size={18} />,
-    title: '脚本分享',
-    description: '常用自动化脚本和使用说明，供受邀成员查阅。',
-    route: '/scripts',
-    locked: true,
-  },
-  {
-    icon: <LayoutDashboard size={18} />,
-    title: '受邀工具',
-    description: '工作站与任务提交能力，只作为自用效率工具。',
-    route: '/workstation',
-    locked: true,
-  },
-];
+import { homeShowcaseApi, type BackendContent } from '../shared/api/lumitimeApi';
 
 export function HomePage() {
   const navigate = useNavigate();
   const { isLoggedIn, isAdmin, logout, user } = useAuth();
+  const [showcase, setShowcase] = useState<BackendContent[]>([]);
+  const [showcaseLoading, setShowcaseLoading] = useState(true);
+
+  useEffect(() => {
+    let alive = true;
+    setShowcaseLoading(true);
+    homeShowcaseApi({ limit: 4 })
+      .then(payload => {
+        if (alive) setShowcase(payload.data);
+      })
+      .catch(() => {
+        if (alive) setShowcase([]);
+      })
+      .finally(() => {
+        if (alive) setShowcaseLoading(false);
+      });
+    return () => {
+      alive = false;
+    };
+  }, []);
 
   return (
     <div className="relative min-h-screen overflow-x-hidden bg-[var(--lumitime-bg)] text-[#171717] dark:text-[#f5f2ea]">
@@ -109,23 +77,18 @@ export function HomePage() {
 
               <div className="mt-9 grid max-w-[22rem] grid-cols-1 gap-3 sm:max-w-none sm:flex sm:flex-wrap sm:items-center">
                 <Button onClick={() => navigate('/notes')} className="h-10 gap-2 bg-[#161616] px-4 text-white hover:bg-black sm:px-5">
-                  进入随记
+                  阅读随记
                   <ArrowRight size={14} />
                 </Button>
-                <Button
-                  onClick={() => navigate('/works')}
-                  variant="outline"
-                  className="h-10 border-[#d9d5ca] bg-white/78 px-4 text-[#171717] hover:bg-white sm:px-5"
-                >
-                  查看作品
-                </Button>
-                <Button
-                  onClick={() => navigate('/dashboard')}
-                  variant="ghost"
-                  className="h-10 text-[#6f6d67] hover:bg-white hover:text-[#171717]"
-                >
-                  查看大屏
-                </Button>
+                {isLoggedIn && (
+                  <Button
+                    onClick={() => navigate('/works')}
+                    variant="outline"
+                    className="h-10 border-[#d9d5ca] bg-white/78 px-4 text-[#171717] hover:bg-white sm:px-5"
+                  >
+                    查看作品
+                  </Button>
+                )}
               </div>
 
               <div className="mt-5 grid max-w-[22rem] grid-cols-1 gap-3 sm:max-w-none sm:flex sm:flex-wrap sm:items-center">
@@ -199,15 +162,15 @@ export function HomePage() {
 
                   <div className="mb-6 space-y-3 border-l border-[#dcd8ce] pl-4">
                     <p className="max-w-[18rem] text-sm leading-7 text-[#56544f] sm:max-w-none">
-                      先看看站点状态与公开随记。受邀内容登录后展开，工具入口保持清晰。
+                      先阅读公开随记。受邀内容登录后展开，工具入口保持清晰。
                     </p>
-                    <p className="font-mono text-xs text-[#aaa69c]">public board · quiet notes · invited archive</p>
+                    <p className="font-mono text-xs text-[#aaa69c]">quiet notes · invited archive · personal workbench</p>
                   </div>
 
                   <div className="grid min-w-0 gap-3 sm:grid-cols-2 lg:grid-cols-1">
-                    <AccessRow icon={<Monitor size={14} />} label="第一入口" value="大屏看板" open />
-                    <AccessRow icon={<ShieldCheck size={14} />} label="公开内容" value="随记" open />
+                    <AccessRow icon={<ShieldCheck size={14} />} label="公开内容" value="随记只读" open />
                     <AccessRow icon={<LockKeyhole size={14} />} label="受邀内容" value="作品 / 心得 / 脚本" open={false} />
+                    <AccessRow icon={<LayoutDashboard size={14} />} label="登录后" value="工作站" open={false} />
                   </div>
                 </div>
               </motion.aside>
@@ -217,27 +180,20 @@ export function HomePage() {
 
         <section className="mx-auto max-w-6xl px-5 py-16 sm:px-6">
           <SectionTitle
-            label="Public"
-            title="公开入口"
-            desc="访客可访问。这里保留轻量表达和站点聚合状态，不展示用户明细或敏感内容。"
+            label="Showcase"
+            title="展示"
+            desc="这里展示后台标记为首页展示的已发布内容，保持轻量读取，未来可扩展为流动展板。"
           />
-          <div className="mt-7 grid grid-cols-1 gap-4 md:grid-cols-2">
-            {publicModules.map((mod, i) => (
-              <ModuleCard key={mod.title} {...mod} index={i} isLoggedIn={isLoggedIn} />
-            ))}
-          </div>
-        </section>
-
-        <section className="mx-auto max-w-6xl px-5 pb-20 sm:px-6">
-          <SectionTitle
-            label="Archive"
-            title="内容沉淀与受邀工具"
-            desc={isLoggedIn ? '内容与工具已解锁，可以进入详情或工作站继续操作。' : '受邀内容保持可见但锁定，登录或使用邀请码注册后进入。'}
-          />
-          <div className="mt-7 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-            {invitedModules.map((mod, i) => (
-              <ModuleCard key={mod.title} {...mod} index={i} isLoggedIn={isLoggedIn} />
-            ))}
+          <div className="mt-7 grid grid-cols-1 gap-4 sm:grid-cols-2">
+            {showcaseLoading ? (
+              Array.from({ length: 2 }).map((_, index) => <ShowcaseSkeleton key={index} />)
+            ) : showcase.length ? (
+              showcase.map((item, index) => <ShowcaseCard key={item.id} item={item} index={index} />)
+            ) : (
+              <div className="rounded-lg border border-[#e7e2d8] bg-white/75 p-5 text-sm leading-7 text-[#77736a] shadow-[0_18px_45px_rgba(20,20,20,0.04)]">
+                展示内容待更新。管理员可在后台内容管理中将已发布内容设为“首页展示”。
+              </div>
+            )}
           </div>
         </section>
 
@@ -261,6 +217,48 @@ function SectionTitle({ label, title, desc }: { label: string; title: string; de
       <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
         <h2 className="text-2xl font-medium tracking-[-0.01em] text-[#171717]">{title}</h2>
         <p className="max-w-xl text-sm leading-6 text-[#6f6d67]">{desc}</p>
+      </div>
+    </div>
+  );
+}
+
+function ShowcaseCard({ item, index }: { item: BackendContent; index: number }) {
+  const typeLabel = { script: '脚本', work: '作品', blog: '心得' }[item.type] || '内容';
+  return (
+    <motion.article
+      initial={{ opacity: 0, y: 16 }}
+      whileInView={{ opacity: 1, y: 0 }}
+      viewport={{ once: true, margin: '-80px' }}
+      transition={{ duration: 0.45, delay: index * 0.06 }}
+      className="min-h-[168px] rounded-lg border border-[#e7e2d8] bg-white/78 p-5 shadow-[0_18px_45px_rgba(20,20,20,0.045)]"
+    >
+      <div className="mb-5 flex items-center justify-between gap-3">
+        <span className="rounded-full border border-[#ddd8ce] px-2.5 py-1 text-xs text-[#6f6d67]">{typeLabel}</span>
+        <span className="truncate text-xs text-[#aaa69c]">{item.tag || item.category || item.language || 'Lumitime'}</span>
+      </div>
+      <h3 className="line-clamp-2 text-lg font-medium leading-7 text-[#171717]">{item.title}</h3>
+      <p className="mt-3 line-clamp-3 text-sm leading-7 text-[#6f6d67]">{item.summary || item.desc || '这一条展示内容由后台维护。'}</p>
+      {item.tags?.length ? (
+        <div className="mt-5 flex flex-wrap gap-2">
+          {item.tags.slice(0, 3).map(tag => (
+            <span key={tag} className="rounded-full bg-[#f3f0e8] px-2 py-1 text-xs text-[#77736a]">
+              {tag}
+            </span>
+          ))}
+        </div>
+      ) : null}
+    </motion.article>
+  );
+}
+
+function ShowcaseSkeleton() {
+  return (
+    <div className="min-h-[168px] animate-pulse rounded-lg border border-[#e7e2d8] bg-white/65 p-5">
+      <div className="mb-6 h-5 w-20 rounded-full bg-[#eeeae2]" />
+      <div className="h-6 w-2/3 rounded bg-[#eeeae2]" />
+      <div className="mt-4 space-y-2">
+        <div className="h-4 rounded bg-[#f1ede5]" />
+        <div className="h-4 w-4/5 rounded bg-[#f1ede5]" />
       </div>
     </div>
   );

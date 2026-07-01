@@ -227,6 +227,7 @@ def create_content(body: ContentCreateBody, request: Request, db: Session = Depe
         category=body.category,
         tags_json=json_list(body.tags),
         status=body.status,
+        visibility=body.visibility,
         allow_copy=1 if body.allow_copy else 0,
         created_by=admin.id,
         published_at=now_utc() if body.status == "published" else None,

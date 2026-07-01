@@ -230,20 +230,20 @@
 
   .animated-list--gradients::before {
     top: 4rem;
-    box-shadow: 0 14px 28px 22px rgb(248 248 247 / 0.64);
+    box-shadow: 0 14px 28px 22px color-mix(in srgb, var(--lumitime-bg) 68%, transparent);
   }
 
   .animated-list--gradients::after {
     bottom: 0;
-    box-shadow: 0 -14px 28px 22px rgb(248 248 247 / 0.50);
+    box-shadow: 0 -14px 28px 22px color-mix(in srgb, var(--lumitime-bg) 56%, transparent);
   }
 
   .dark .animated-list--gradients::before {
-    box-shadow: 0 14px 28px 22px rgb(17 17 17 / 0.66);
+    box-shadow: 0 14px 28px 22px color-mix(in srgb, var(--lumitime-bg) 72%, transparent);
   }
 
   .dark .animated-list--gradients::after {
-    box-shadow: 0 -14px 28px 22px rgb(17 17 17 / 0.54);
+    box-shadow: 0 -14px 28px 22px color-mix(in srgb, var(--lumitime-bg) 60%, transparent);
   }
 
   .animated-list__item {

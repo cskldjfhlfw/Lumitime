@@ -249,15 +249,21 @@ def json_list(value: list[str]) -> str:
     return json.dumps(value, ensure_ascii=False)
 
 
-def paginate_query(db: Session, statement: Select[Any], page: int, page_size: int) -> tuple[list[Any], int]:
+def normalize_pagination(page: int, page_size: int) -> tuple[int, int]:
     page = max(page, 1)
     page_size = min(max(page_size, 1), 100)
+    return page, page_size
+
+
+def paginate_query(db: Session, statement: Select[Any], page: int, page_size: int) -> tuple[list[Any], int]:
+    page, page_size = normalize_pagination(page, page_size)
     total = db.scalar(select(func.count()).select_from(statement.order_by(None).subquery())) or 0
     items = list(db.scalars(statement.offset((page - 1) * page_size).limit(page_size)).all())
     return items, total
 
 
 def paginated(items: list[Any], total: int, page: int, page_size: int) -> dict[str, Any]:
+    page, page_size = normalize_pagination(page, page_size)
     return {"items": items, "page": page, "page_size": page_size, "total": total}
 
 

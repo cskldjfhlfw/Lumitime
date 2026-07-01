@@ -6,15 +6,35 @@ from fastapi import APIRouter, Depends, Request
 from sqlalchemy import desc, select
 from sqlalchemy.orm import Session
 
-from ..core import ApiError, created, make_response, paginated, paginate_query, prefixed_id, request_meta
+from ..core import created, make_response, paginated, paginate_query, prefixed_id, request_meta
 from ..database import get_db
-from ..deps import get_current_user_optional
+from ..deps import require_auth
 from ..metrics import current_dashboard_totals
-from ..models import DailyMetricSnapshot, Message, User
+from ..models import ContentItem, DailyMetricSnapshot, Message, User
+from ..rate_limit import RateLimit, check_rate_limit, rate_limit_key
 from ..schemas import MessageCreateBody
-from ..serializers import message_public, snapshot_public
+from ..serializers import content_public, message_public, snapshot_public
 
 router = APIRouter(tags=["public"])
+MESSAGE_CREATE_RATE_LIMIT = RateLimit(max_attempts=3, window_seconds=60.0)
+HOME_SHOWCASE_LIMIT_MAX = 8
+
+
+@router.get("/home/showcase")
+def home_showcase(request: Request, limit: int = 4, db: Session = Depends(get_db)):
+    limit = max(1, min(limit, HOME_SHOWCASE_LIMIT_MAX))
+    statement = (
+        select(ContentItem)
+        .where(
+            ContentItem.status == "published",
+            ContentItem.visibility == "home_showcase",
+            ContentItem.deleted_at.is_(None),
+        )
+        .order_by(desc(ContentItem.updated_at))
+        .limit(limit)
+    )
+    items = list(db.scalars(statement).all())
+    return make_response([content_public(item) for item in items], request=request)
 
 
 @router.get("/messages")
@@ -25,14 +45,9 @@ def list_messages(request: Request, page: int = 1, page_size: int = 20, db: Sess
 
 
 @router.post("/messages")
-def create_message(body: MessageCreateBody, request: Request, db: Session = Depends(get_db), user: User | None = Depends(get_current_user_optional)):
+def create_message(body: MessageCreateBody, request: Request, db: Session = Depends(get_db), user: User = Depends(require_auth)):
     ip_hash, ua = request_meta(request)
-    latest = db.scalars(select(Message).where(Message.source_ip_hash == ip_hash).order_by(desc(Message.created_at)).limit(3)).all()
-    if len(latest) >= 3:
-        # Simple development guard. Production should use Redis or a durable limiter.
-        recent_seconds = [(latest[0].created_at - item.created_at).total_seconds() for item in latest[1:]]
-        if recent_seconds and max(recent_seconds) < 60:
-            raise ApiError("RATE_LIMITED", "提交过于频繁。")
+    check_rate_limit(rate_limit_key(request, "message", user.id), MESSAGE_CREATE_RATE_LIMIT, "提交过于频繁。")
     message = Message(
         id=prefixed_id("msg"),
         nickname=body.nickname.strip(),
@@ -47,7 +62,7 @@ def create_message(body: MessageCreateBody, request: Request, db: Session = Depe
 
 
 @router.get("/dashboard/metrics")
-def dashboard_metrics(request: Request, range: str = "7d", db: Session = Depends(get_db)):  # noqa: A002 - API field name.
+def dashboard_metrics(request: Request, range: str = "7d", db: Session = Depends(get_db), user: User = Depends(require_auth)):  # noqa: A002 - API field name.
     days = {"7d": 7, "30d": 30, "90d": 90}.get(range, 7)
     snapshots = list(db.scalars(select(DailyMetricSnapshot).order_by(desc(DailyMetricSnapshot.snapshot_date)).limit(days)).all())
     snapshots.reverse()

@@ -176,6 +176,7 @@ export function dashboardMetricsApi(range: DashboardRange) {
 
 export type ContentType = 'script' | 'work' | 'blog';
 export type ContentKind = 'scripts' | 'works' | 'blogs';
+export type ContentVisibility = 'invited_only' | 'home_showcase';
 
 export interface BackendAttachment {
   id: string;
@@ -202,6 +203,7 @@ export interface BackendContent {
   tag?: string | null;
   tags?: string[];
   status?: 'draft' | 'published' | 'unpublished' | string;
+  visibility?: ContentVisibility | string;
   updated_at?: string;
   updatedAt?: string;
   allow_copy?: boolean;
@@ -222,6 +224,10 @@ export function listContentApi(kind: ContentKind, query: { keyword?: string; pag
 
 export function contentDetailApi(kind: ContentKind, contentId: string) {
   return apiFetch<BackendContent>(`${contentPathMap[kind]}/${encodeURIComponent(contentId)}`);
+}
+
+export function homeShowcaseApi(query: { limit?: number } = {}) {
+  return apiFetch<BackendContent[]>(`/home/showcase${queryString(query)}`);
 }
 
 export function attachmentDownloadUrl(workId: string, attachmentId: string) {
@@ -372,8 +378,10 @@ export function adminDisableInviteApi(inviteId: string) {
   return apiFetch<BackendInvite>(`/admin/invite-codes/${encodeURIComponent(inviteId)}/disable`, { method: 'PATCH' });
 }
 
-export function adminInviteUsageApi(inviteId: string) {
-  return apiFetch<Paginated<BackendInviteUsage>>(`/admin/invite-codes/${encodeURIComponent(inviteId)}/usage-records`);
+export function adminInviteUsageApi(inviteId: string, query: { page?: number; page_size?: number } = {}) {
+  return apiFetch<Paginated<BackendInviteUsage>>(
+    `/admin/invite-codes/${encodeURIComponent(inviteId)}/usage-records${queryString(query)}`,
+  );
 }
 
 export function adminListUsersApi(query: { status?: string; role?: string; keyword?: string; page?: number; page_size?: number } = {}) {
@@ -413,6 +421,7 @@ export function adminCreateContentApi(body: {
   category?: string | null;
   tags?: string[];
   status?: string;
+  visibility?: ContentVisibility;
   allow_copy?: boolean;
 }) {
   return apiFetch<BackendContent>('/admin/contents', { method: 'POST', body: JSON.stringify(body) });
@@ -427,6 +436,7 @@ export function adminPatchContentApi(contentId: string, body: Partial<{
   category: string | null;
   tags: string[];
   status: string;
+  visibility: ContentVisibility;
   allow_copy: boolean;
 }>) {
   return apiFetch<BackendContent>(`/admin/contents/${encodeURIComponent(contentId)}`, {

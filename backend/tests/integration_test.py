@@ -148,7 +148,8 @@ def test_nginx_template_overwrites_forwarded_for_header() -> None:
     template = Path("deploy/nginx/lumitime.conf.template").read_text(encoding="utf-8")
 
     assert "$proxy_add_x_forwarded_for" not in template
-    assert template.count("proxy_set_header X-Forwarded-For $remote_addr;") == 2
+    assert template.count("proxy_pass http://api:8000;") == 4
+    assert template.count("proxy_set_header X-Forwarded-For $remote_addr;") == 4
 
 
 def test_bootstrap_admin_requires_token_and_reactivates_existing_demo_admin() -> None:
@@ -359,6 +360,58 @@ def test_content_crud_and_attachment_download() -> None:
         assert denied.status_code == 403
 
 
+def test_public_home_showcase_only_returns_published_showcase_items() -> None:
+    with TestClient(app) as client:
+        _login(client, "admin", "admin")
+
+        showcase_title = _uid("showcase")
+        ordinary_title = _uid("ordinary")
+        created_showcase = client.post(
+            "/api/v1/admin/contents",
+            headers=_csrf_headers(client),
+            json={
+                "type": "work",
+                "title": showcase_title,
+                "summary": "public home card",
+                "body": "body that should not be returned from list serializer",
+                "category": "project",
+                "tags": ["home"],
+                "status": "published",
+                "visibility": "home_showcase",
+            },
+        )
+        assert created_showcase.status_code == 201, created_showcase.text
+
+        created_ordinary = client.post(
+            "/api/v1/admin/contents",
+            headers=_csrf_headers(client),
+            json={
+                "type": "work",
+                "title": ordinary_title,
+                "summary": "invited only",
+                "body": "private body",
+                "category": "project",
+                "tags": ["private"],
+                "status": "published",
+                "visibility": "invited_only",
+            },
+        )
+        assert created_ordinary.status_code == 201, created_ordinary.text
+
+        _logout(client)
+
+        response = client.get("/api/v1/home/showcase?limit=20")
+        assert response.status_code == 200, response.text
+        items = response.json()["data"]
+        titles = {item["title"] for item in items}
+        assert showcase_title in titles
+        assert ordinary_title not in titles
+        showcase_item = next(item for item in items if item["title"] == showcase_title)
+        assert showcase_item["visibility"] == "home_showcase"
+        assert "body" not in showcase_item
+        assert len(items) <= 8
+
+
 def test_attachment_upload_rejects_empty_and_oversized_files() -> None:
     with TestClient(app) as client:
         _login(client, "admin", "admin")
@@ -394,15 +447,26 @@ def test_attachment_upload_rejects_empty_and_oversized_files() -> None:
 
 def test_message_moderation_and_rate_limit() -> None:
     with TestClient(app) as client:
-        headers = {"x-forwarded-for": f"10.20.{int(uuid.uuid4().hex[:2], 16)}.{int(uuid.uuid4().hex[2:4], 16)}"}
+        member_name, member_password, _ = _create_member(client)
+        _login(client, member_name, member_password)
+        headers = {"x-real-ip": f"10.20.{int(uuid.uuid4().hex[:2], 16)}.{int(uuid.uuid4().hex[2:4], 16)}"}
         message_ids: list[str] = []
         for idx in range(3):
-            response = client.post("/api/v1/messages", json={"nickname": f"guest{idx}", "content": _uid("message")}, headers=headers)
+            response = client.post(
+                "/api/v1/messages",
+                json={"nickname": f"guest{idx}", "content": _uid("message")},
+                headers={**headers, **_csrf_headers(client)},
+            )
             assert response.status_code == 201, response.text
             message_ids.append(response.json()["data"]["id"])
-        limited = client.post("/api/v1/messages", json={"nickname": "guest4", "content": _uid("message")}, headers=headers)
+        limited = client.post(
+            "/api/v1/messages",
+            json={"nickname": "guest4", "content": _uid("message")},
+            headers={**headers, **_csrf_headers(client)},
+        )
         assert limited.status_code == 429
 
+        _logout(client)
         _login(client, "admin", "admin")
         hidden = client.patch(f"/api/v1/admin/messages/{message_ids[0]}/hide", headers=_csrf_headers(client))
         assert hidden.status_code == 200
@@ -418,6 +482,88 @@ def test_message_moderation_and_rate_limit() -> None:
         assert restored.status_code == 200
         deleted = client.delete(f"/api/v1/admin/messages/{message_ids[0]}", headers=_csrf_headers(client))
         assert deleted.status_code == 200
+
+
+def test_public_dashboard_requires_login_and_guest_messages_are_readonly() -> None:
+    with TestClient(app) as client:
+        assert client.get("/api/v1/messages").status_code == 200
+
+        guest_create = client.post("/api/v1/messages", json={"nickname": "visitor", "content": _uid("message")})
+        assert guest_create.status_code == 401
+        assert guest_create.json()["code"] == "UNAUTHORIZED"
+
+        guest_dashboard = client.get("/api/v1/dashboard/metrics")
+        assert guest_dashboard.status_code == 401
+        assert guest_dashboard.json()["code"] == "UNAUTHORIZED"
+
+        member_name, member_password, display_name = _create_member(client)
+        _login(client, member_name, member_password)
+        member_create = client.post(
+            "/api/v1/messages",
+            json={"nickname": display_name, "content": _uid("message")},
+            headers=_csrf_headers(client),
+        )
+        assert member_create.status_code == 201, member_create.text
+        assert client.get("/api/v1/dashboard/metrics").status_code == 200
+
+
+def test_register_rate_limit_is_scoped_to_invite_and_ip() -> None:
+    with TestClient(app) as client:
+        _login(client, "admin", "admin")
+        invite_response = client.post(
+            "/api/v1/admin/invite-codes",
+            json={"usage_limit": 10, "remark": "pytest-rate-limit"},
+            headers=_csrf_headers(client),
+        )
+        assert invite_response.status_code == 201, invite_response.text
+        invite_code = invite_response.json()["data"]["code"]
+        _logout(client)
+
+        headers = {"x-real-ip": f"10.21.{int(uuid.uuid4().hex[:2], 16)}.{int(uuid.uuid4().hex[2:4], 16)}"}
+        for index in range(3):
+            created = client.post(
+                "/api/v1/auth/register-with-invite",
+                json={
+                    "invite_code": invite_code,
+                    "username": _uid(f"rate_member_{index}"),
+                    "display_name": f"Rate Member {index}",
+                    "password": _uid("ratepass"),
+                },
+                headers=headers,
+            )
+            assert created.status_code == 201, created.text
+
+        limited = client.post(
+            "/api/v1/auth/register-with-invite",
+            json={
+                "invite_code": invite_code,
+                "username": _uid("rate_member_4"),
+                "display_name": "Rate Member 4",
+                "password": _uid("ratepass"),
+            },
+            headers=headers,
+        )
+        assert limited.status_code == 429
+        assert limited.json()["code"] == "RATE_LIMITED"
+
+
+def test_rate_limit_store_prunes_stale_and_caps_total_buckets(monkeypatch) -> None:
+    from backend.app import rate_limit
+
+    monkeypatch.setattr(rate_limit, "MAX_RATE_LIMIT_BUCKETS", 3)
+    monkeypatch.setattr(rate_limit, "monotonic", lambda: 100.0)
+    rate_limit._BUCKETS.clear()
+
+    limit = rate_limit.RateLimit(max_attempts=10, window_seconds=30.0)
+    rate_limit.check_rate_limit("stale", limit)
+    rate_limit._BUCKETS["stale"].clear()
+    rate_limit._BUCKETS["stale"].append(1.0)
+
+    for index in range(5):
+        rate_limit.check_rate_limit(f"bucket-{index}", limit)
+
+    assert "stale" not in rate_limit._BUCKETS
+    assert len(rate_limit._BUCKETS) <= 3
 
 
 def test_workstation_states_and_retry() -> None:
@@ -689,6 +835,7 @@ def test_privacy_and_exports_are_sanitized() -> None:
         public_routes.current_dashboard_totals = boom
         try:
             with TestClient(app, raise_server_exceptions=False) as error_client:
+                _login(error_client, "admin", "admin")
                 failure = error_client.get("/api/v1/dashboard/metrics")
                 assert failure.status_code == 500
                 payload = failure.json()
@@ -1301,6 +1448,10 @@ def test_admin_filters_and_pagination() -> None:
         assert contents.status_code == 200
         assert contents.json()["data"]["page_size"] == 1
         assert contents.json()["data"]["total"] >= 1
+
+        capped_contents = client.get("/api/v1/admin/contents?type=script&page=1&page_size=1000")
+        assert capped_contents.status_code == 200
+        assert capped_contents.json()["data"]["page_size"] == 100
 
         messages = client.get("/api/v1/admin/messages?status=visible&page=1&page_size=1")
         assert messages.status_code == 200

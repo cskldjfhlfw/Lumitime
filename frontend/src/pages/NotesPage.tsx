@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { motion } from 'motion/react';
-import { Loader2, PenLine, RefreshCw, Send, Sparkles } from 'lucide-react';
+import { Loader2, LogIn, PenLine, RefreshCw, Send, Sparkles } from 'lucide-react';
+import { useNavigate } from 'react-router';
 import { toast } from 'sonner';
 import { MainNav } from '../layouts/MainNav';
 import AnimatedList from '../shared/components/AnimatedList';
@@ -20,6 +21,7 @@ import { ApiClientError, createMessageApi, listMessagesApi, type BackendMessage 
 const NOTES_PAGE_SIZE = 10;
 
 export function NotesPage() {
+  const navigate = useNavigate();
   const { isLoggedIn, isAdmin, logout, user } = useAuth();
   const [notes, setNotes] = useState<BackendMessage[]>([]);
   const [page, setPage] = useState(1);
@@ -31,7 +33,13 @@ export function NotesPage() {
   const [error, setError] = useState('');
   const [composerOpen, setComposerOpen] = useState(false);
 
-  const canSubmit = useMemo(() => nickname.trim().length > 0 && content.trim().length >= 2, [content, nickname]);
+  const canSubmit = useMemo(() => isLoggedIn && nickname.trim().length > 0 && content.trim().length >= 2, [content, isLoggedIn, nickname]);
+
+  useEffect(() => {
+    if (user?.displayName && !nickname.trim()) {
+      setNickname(user.displayName);
+    }
+  }, [nickname, user?.displayName]);
 
   const loadMessages = () => {
     setLoading(true);
@@ -71,7 +79,7 @@ export function NotesPage() {
   };
 
   return (
-    <div className="min-h-screen bg-[#f8f8f7]">
+    <div className="min-h-screen bg-[#f8f8f7] dark:bg-[#111111]">
       <MainNav isLoggedIn={isLoggedIn} isAdmin={isAdmin} userLabel={user?.displayName} onLogout={logout} />
 
       <main className="mx-auto w-full max-w-4xl px-5 py-10 sm:px-6">
@@ -86,10 +94,21 @@ export function NotesPage() {
               <h1 className="text-3xl font-medium text-gray-950 dark:text-white">随记 / 留言板</h1>
               <p className="mt-2 text-xs text-gray-400 dark:text-white/42">共 {total} 条公开随记</p>
             </div>
-            <Button onClick={() => setComposerOpen(true)} className="h-10 gap-2 bg-black text-white hover:bg-black/85">
-              <PenLine size={14} />
-              写一条随记
-            </Button>
+            {isLoggedIn ? (
+              <Button onClick={() => setComposerOpen(true)} className="h-10 gap-2 bg-black text-white hover:bg-black/85 dark:bg-white dark:text-[#171717] dark:hover:bg-white/90">
+                <PenLine size={14} />
+                写一条随记
+              </Button>
+            ) : (
+              <Button
+                variant="outline"
+                onClick={() => navigate('/login', { state: { from: '/notes' } })}
+                className="h-10 gap-2 border-gray-200 bg-white text-gray-700 hover:bg-gray-50 dark:border-white/10 dark:bg-white/[0.06] dark:text-white/72 dark:hover:bg-white/10"
+              >
+                <LogIn size={14} />
+                登录后写随记
+              </Button>
+            )}
           </div>
 
           <div className="flex flex-col gap-3">
@@ -109,7 +128,7 @@ export function NotesPage() {
               </div>
             )}
             {!loading && !error && notes.length === 0 && (
-              <div className="rounded-lg border border-dashed border-gray-200 bg-white py-16 text-center text-sm text-gray-400">
+              <div className="rounded-lg border border-dashed border-gray-200 bg-white py-16 text-center text-sm text-gray-400 dark:border-white/10 dark:bg-white/[0.04] dark:text-white/40">
                 暂无公开留言
               </div>
             )}

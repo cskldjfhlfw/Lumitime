@@ -47,7 +47,7 @@ export function MainNav({ isLoggedIn, isAdmin, userLabel, onLogout }: MainNavPro
   };
 
   const navItems = useMemo(() => [
-    { to: '/dashboard', icon: <Monitor size={14} />, label: '大屏看板', show: true },
+    { to: '/dashboard', icon: <Monitor size={14} />, label: '大屏看板', show: isLoggedIn },
     { to: '/notes', icon: <PenLine size={14} />, label: '随记', show: true },
     { to: '/', icon: <Home size={14} />, label: '首页', show: !isLoggedIn },
     { to: '/scripts', icon: <Code2 size={14} />, label: '脚本分享', show: isLoggedIn },

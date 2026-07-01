@@ -95,8 +95,10 @@ test('homepage keeps personal-site positioning and workstation as an invited too
   const homePage = source('src', 'pages', 'HomePage.tsx');
 
   assert.match(homePage, /个人站|个人创作|记录、沉淀/);
-  assert.match(homePage, /受邀工具/);
-  assert.match(homePage, /route:\s*'\/workstation'/);
+  assert.match(homePage, /homeShowcaseApi/);
+  assert.match(homePage, /首页展示/);
+  assert.doesNotMatch(homePage, /route:\s*'\/workstation'/);
+  assert.doesNotMatch(homePage, /route:\s*'\/dashboard'/);
   assert.doesNotMatch(homePage, /自动化工作站 SaaS|企业 SaaS|团队协作/);
 });
 
@@ -252,6 +254,62 @@ test('public homepage does not mount continuous canvas effects', () => {
   assert.doesNotMatch(homePage, /requestAnimationFrame/);
   assert.doesNotMatch(homePage, /<canvas/);
   assert.doesNotMatch(homePage, /shared\/components\/LightRays/);
+});
+
+test('production nginx applies edge rate limits before proxying api traffic', () => {
+  const nginxTemplate = source('..', 'deploy', 'nginx', 'lumitime.conf.template');
+
+  assert.match(nginxTemplate, /limit_req_zone\s+\$binary_remote_addr\s+zone=lumitime_api_per_ip:10m\s+rate=10r\/s;/);
+  assert.match(nginxTemplate, /limit_req_zone\s+\$binary_remote_addr\s+zone=lumitime_auth_per_ip:10m\s+rate=1r\/s;/);
+  assert.match(nginxTemplate, /limit_conn_zone\s+\$binary_remote_addr\s+zone=lumitime_conn_per_ip:10m;/);
+  assert.match(nginxTemplate, /limit_req_status\s+429;/);
+  assert.match(nginxTemplate, /limit_conn_status\s+429;/);
+  assert.match(nginxTemplate, /location = \/api\/v1\/auth\/login[\s\S]*limit_req zone=lumitime_auth_per_ip burst=5 nodelay;/);
+  assert.match(nginxTemplate, /location \/api\/[\s\S]*limit_req zone=lumitime_api_per_ip burst=60 nodelay;/);
+  assert.match(nginxTemplate, /proxy_set_header X-Real-IP \$remote_addr;/);
+});
+
+test('logged-out public surfaces avoid expensive dashboard and message writes', () => {
+  const appRoutes = source('src', 'app', 'App.tsx');
+  const homePage = source('src', 'pages', 'HomePage.tsx');
+  const notesPage = source('src', 'pages', 'NotesPage.tsx');
+  const mainNav = source('src', 'layouts', 'MainNav.tsx');
+
+  assert.match(appRoutes, /path="\/dashboard"\s+element=\{<ProtectedRoute><DashboardPage \/><\/ProtectedRoute>\}/);
+  assert.doesNotMatch(homePage, /route:\s*'\/dashboard'/);
+  assert.doesNotMatch(homePage, /navigate\('\/dashboard'\)/);
+  assert.doesNotMatch(homePage, /大屏看板/);
+  assert.match(homePage, /homeShowcaseApi\(\{ limit: 4 \}\)/);
+  assert.match(notesPage, /\{isLoggedIn \? \(/);
+  assert.match(notesPage, /登录后写随记/);
+  const dashboardNavLine = (mainNav.match(/const navItems = useMemo\(\(\) => \[([\s\S]*?)\],/)?.[1] || '')
+    .split('\n')
+    .find(line => line.includes("to: '/dashboard'")) || '';
+  assert.match(dashboardNavLine, /show:\s*isLoggedIn/);
+  assert.doesNotMatch(dashboardNavLine, /show:\s*true/);
+});
+
+test('admin content can mark published items for the public home showcase', () => {
+  const adminPage = source('src', 'pages', 'AdminPage.tsx');
+  const apiClient = source('src', 'shared', 'api', 'lumitimeApi.ts');
+
+  assert.match(apiClient, /export type ContentVisibility = 'invited_only' \| 'home_showcase'/);
+  assert.match(apiClient, /export function homeShowcaseApi/);
+  assert.match(adminPage, /Field label="展示位置"/);
+  assert.match(adminPage, /<option value="home_showcase">首页展示<\/option>/);
+  assert.match(adminPage, /visibility: form\.visibility/);
+  assert.match(adminPage, /ContentVisibilityBadge/);
+});
+
+test('admin row menus use Radix select events for sheet actions', () => {
+  const adminPage = source('src', 'pages', 'AdminPage.tsx');
+  const button = source('src', 'shared', 'ui', 'button.tsx');
+
+  assert.match(adminPage, /onSelect=\{event => \{/);
+  assert.match(adminPage, /event\.preventDefault\(\)/);
+  assert.doesNotMatch(adminPage, /DropdownMenuItem[\s\S]*onClick=\{item\.onClick\}/);
+  assert.match(button, /React\.forwardRef/);
+  assert.match(button, /ref=\{ref\}/);
 });
 
 test('profile page contains settings and constrains recent service rows', () => {
